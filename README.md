@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Expensetracker app
 
 ## Run the app
@@ -79,3 +80,7 @@ flet build windows -v
 ```
 
 For more details on building Windows package, refer to the [Windows Packaging Guide](https://flet.dev/docs/publish/windows/).
+=======
+# budgetmobileapp
+tracking expense mobile app with python and flet
+>>>>>>> 0201777b82a33461ddf89448246dd652a6c77ced
