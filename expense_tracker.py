@@ -1,15 +1,79 @@
 import flet as ft
 import firebase_admin
-from firebase_admin import credentials, firestore
+import requests
+from firebase_admin import credentials, firestore, auth
 from datetime import datetime, date, timedelta
 import json
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
+
+class FirebaseAuth:
+    def __init__(self, api_key, service_account_path):
+        self.api_key = api_key
+        self.auth_url = f"https://identitytoolkit.googleapis.com/v1/accounts"
+
+        # Initialize Firebase Admin SDK
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(service_account_path)
+            firebase_admin.initialize_app(cred)
+
+    def sign_up(self, email, password):
+        """Create new user account"""
+        url = f"{self.auth_url}:signUp?key={self.api_key}"
+        payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                error_data = response.json()
+                return {"error": error_data.get("error", {}).get("message", "Unknown error")}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def verify_token(self, id_token):
+        """Verify ID token using Admin SDK"""
+        try:
+            decoded_token = auth.verify_id_token(id_token)
+            return decoded_token
+        except Exception as e:
+            return {"error": str(e)}
+
+    def sign_in(self, email, password):
+        """Sign in existing user"""
+        url = f"{self.auth_url}:signInWithPassword?key={self.api_key}"
+        payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                error_data = response.json()
+                return {"error": error_data.get("error", {}).get("message", "Unknown error")}
+        except Exception as e:
+            return {"error": str(e)}
 
 class BudgetApp:
-    def __init__(self):
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.page.title = "Expense Tracker"
+        self.page.theme_mode = ft.ThemeMode.LIGHT
+        self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
+        self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         self.db = None
-        self.page = None
+
         self.budget_amount = 0
         self.start_date = datetime.now().replace(day=1)
         self.end_date = datetime.now()
@@ -20,55 +84,158 @@ class BudgetApp:
         self.recurring_expenses = []
         self.recurring_expense_timestamps = []
 
-    def initialize_firebase(self):
-        """Initialize Firebase connection"""
-        try:
-            # Check if Firebase is already initialized
-            if not firebase_admin._apps:
-                print("🔧 Initializing Firebase...")
+        # Firebase configuration
+        self.API_KEY = os.getenv('FIREBASE_API_KEY')
+        self.SERVICE_ACCOUNT_PATH = os.getenv('SERVICE_ACCOUNT_PATH')
+        #self.firebase_auth = FirebaseAuth(self.API_KEY, self.SERVICE_ACCOUNT_PATH)
+        self.firebase_auth = None
+        self.current_user = None
+        self.id_token = None
+        self.user_id = None
 
-                # Method 1: Using service account key file (RECOMMENDED)
-                service_key_path = "serviceAccountKey.json"  # Update this path
-                if os.path.exists(service_key_path):
-                    print(f"📁 Found service account key at: {service_key_path}")
-                    cred = credentials.Certificate(service_key_path)
-                    firebase_admin.initialize_app(cred)
-                    print("✅ Firebase initialized with service account key")
+        # UI Controls
+        self.email_field = ft.TextField(label="Email", width=300)
+        self.password_field = ft.TextField(label="Password", password=True, width=300)
+        self.error_text = ft.Text(color=ft.colors.RED)
+        self.user_info = ft.Text()
 
-            # Test the connection
-            self.db = firestore.client()
+        # Create main container
+        self.main_container = ft.Column(
+            controls=[self.create_auth_view()],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=20
+        )
+        self.setup_ui()
 
-            # Simple test to verify connection works
-            test_ref = self.db.collection('_test').document('connection')
-            test_ref.set({'test': True, 'timestamp': datetime.now()})
-            test_ref.delete()  # Clean up test document
+    def create_auth_view(self):
+        """Create authentication UI"""
+        return ft.Container(
+            content=ft.Column([
+                ft.Text("Expense Tracker Login", size=24, weight=ft.FontWeight.BOLD),
+                self.email_field,
+                self.password_field,
+                ft.Row([
+                    ft.ElevatedButton("Sign In", on_click=self.sign_in_clicked),
+                    ft.ElevatedButton("Sign Up", on_click=self.sign_up_clicked),
+                ], alignment=ft.MainAxisAlignment.CENTER),
+                self.error_text,
+                self.user_info
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=20
+        )
 
-            print("✅ Firebase connection successful!")
-            return True
+    def sign_in_clicked(self, e):
+        """Handle sign in button click"""
+        email = self.email_field.value
+        password = self.password_field.value
 
-        except Exception as e:
-            print(f"❌ Firebase initialization error: {e}")
-            print("This usually means:")
-            print("1. Service account key file is missing or invalid")
-            print("2. Firebase project doesn't exist")
-            print("3. Firestore is not enabled for your project")
-            print("4. Network connectivity issues")
-            self.db = None
-            return False
-
-    def main(self, page: ft.Page):
-        self.page = page
-        page.title = "Budget Planner"
-        page.theme_mode = ft.ThemeMode.LIGHT
-        page.padding = 20
-
-        # Initialize Firebase
-        if not self.initialize_firebase():
-            page.add(ft.Text("Failed to connect to Firebase. Please check your configuration.", color="red"))
+        if not email or not password:
+            self.show_error("Please enter both email and password")
             return
 
-        # Test Firebase connection and display data
-        self.test_firebase_connection()
+        if not self.initialize_firebase():
+            return
+
+        try:
+            result = self.firebase_auth.sign_in(email, password)
+
+            if "error" in result:
+                self.show_error(result["error"])
+            else:
+                self.current_user = result
+                self.id_token = result["idToken"]
+                self.user_id = result["localId"]
+                self.show_main()
+        except Exception as e:
+            self.show_error(f"Sign in error: {str(e)}")
+
+    def sign_up_clicked(self, e):
+        """Handle sign up button click"""
+        email = self.email_field.value
+        password = self.password_field.value
+
+        if not email or not password:
+            self.show_error("Please enter both email and password")
+            return
+
+        if len(password) < 6:
+            self.show_error("Password must be at least 6 characters")
+            return
+
+        # Initialize Firebase only when needed
+        if not self.initialize_firebase():
+            return
+
+        try:
+            result = self.firebase_auth.sign_up(email, password)
+
+            if "error" in result:
+                self.show_error(result["error"])
+            else:
+                self.current_user = result
+                self.id_token = result["idToken"]
+                self.user_id = result["localId"]
+                self.show_main()
+        except Exception as e:
+            self.show_error(f"Sign up error: {str(e)}")
+
+    def logout_clicked(self, e):
+        """Handle logout"""
+        self.current_user = None
+        self.id_token = None
+        self.email_field.value = ""
+        self.password_field.value = ""
+        self.error_text.value = ""
+
+        # Reset to auth view
+        self.page.clean()
+        auth_view = self.create_auth_view()
+        self.page.add(auth_view)
+        self.page.update()
+
+    def show_error(self, message):
+        """Display error message"""
+        self.error_text.value = message
+        self.page.update()
+
+    def initialize_firebase(self):
+        """Initialize Firebase only when needed"""
+        if self.firebase_auth is None:
+            try:
+                self.firebase_auth = FirebaseAuth(self.API_KEY, self.SERVICE_ACCOUNT_PATH)
+                print("Firebase initialized successfully")
+                return True
+            except Exception as e:
+                self.show_error(f"Firebase initialization error: {str(e)}")
+                print(f"Firebase initialization failed: {e}")
+                return False
+        return True
+
+
+    def setup_ui(self):
+        """Setup the initial UI"""
+        try:
+            # Clear the page first
+            self.page.clean()
+
+            # Add the authentication view
+            auth_view = self.create_auth_view()
+            self.page.add(auth_view)
+            self.page.update()
+
+            print("UI setup complete")  # Debug print
+
+        except Exception as e:
+            print(f"Error setting up UI: {e}")
+            # Add a simple fallback UI
+            self.page.add(ft.Text("Error loading app"))
+            self.page.update()
+
+
+
+    def show_main(self):
+        # Clear the page first
+        self.page.clean()
 
         self.expenses_list = ft.ListView(spacing=10, padding=20, auto_scroll=True, height=300)
         self.recurring_checkbox = ft.Checkbox(label="Recurring expenses", on_change=self.update_expenses_list)
@@ -94,10 +261,13 @@ class BudgetApp:
                                          ft.Tab(text="6M"),
                                          ft.Tab(text="12M"),
                                      ])
+        print("Loading budget")
 
         # Load initial data
         self.load_budget_data()
         self.load_expenses()
+
+        print("Creating tabs")
 
         # Create tabs
         self.overview_tab = self.create_overview_tab()
@@ -118,7 +288,9 @@ class BudgetApp:
             ],
         )
 
-        page.add(tabs)
+
+        self.page.add(tabs)
+
 
 
     def test_firebase_connection(self):
@@ -179,6 +351,11 @@ class BudgetApp:
 
         return ft.Container(
             content=ft.ListView([
+                ft.Row([
+                    ft.Text(f"Welcome, {self.current_user['email']}", size=18),
+                    ft.ElevatedButton("Logout", on_click=self.logout_clicked)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Divider(),
                 ft.Text("Budget Configuration", size=24, weight=ft.FontWeight.BOLD),
                 ft.Row([
                     ft.ElevatedButton(
@@ -217,7 +394,7 @@ class BudgetApp:
                      ft.dropdown.Option("9 Months"),
                      ft.dropdown.Option("10 Months"),
                      ft.dropdown.Option("11 Months")],
-            value="All",
+            value="No",
             width=200,
         )
 
@@ -310,6 +487,7 @@ class BudgetApp:
                         self.get_recurring_period(expense['is recurring']))
                     print(f"Old date is {expense['recurring day']} and New date is {new_date}")
                     expense_data = {
+                        'user id': self.user_id,
                         'amount': expense['amount'],
                         'category': expense['category'],
                         'description': expense['description'],
@@ -319,10 +497,11 @@ class BudgetApp:
                         'recurring day': new_date.strftime('%Y-%m-%d %H:%M:%S')
                         }
 
-
+                    if not self.db:
+                        db = firestore.client()
                     # Save to Firebase if available
                     if self.db:
-                        doc_ref = self.db.collection('expenses').add(expense_data)
+                        doc_ref = self.db.collection('users').document(self.user_id).collection('expenses').add(expense_data)
                         expense_data['id'] = expense['id']
                         print(f"✅ Expense saved successfully with ID: {expense_data['id']}")
                         print(f"📊 Expense data: {expense_data}")
@@ -344,6 +523,7 @@ class BudgetApp:
 
     def update_expenses_list(self, e=None):
         """Update the expenses list display"""
+        print("Entered update expense list function")
         self.expenses_list.controls.clear()
         filtered_expenses = self.expenses
 
@@ -520,11 +700,11 @@ class BudgetApp:
                      ft.dropdown.Option("9 Months"),
                      ft.dropdown.Option("10 Months"),
                      ft.dropdown.Option("11 Months")],
-            value="All",
+            value="No",
             width=200,
         )
 
-        self.recurring_day = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.recurring_day = datetime.now().strftime('%Y-%m-%d')
         self.recurring_date_picker = ft.DatePicker(
             on_change=self.on_recurring_date_change,
             first_date=datetime(2025, 1, 1),
@@ -546,7 +726,7 @@ class BudgetApp:
                 description = description_field.value or ""
                 is_recurring = recurring_period.value
                 if is_recurring not in ['No', 'All']:
-                    recurring_day = self.recurring_day.strftime('%Y-%m-%d %H:%M:%S')
+                    recurring_day = self.recurring_day
                 else:
                     recurring_day = None
 
@@ -556,6 +736,7 @@ class BudgetApp:
                     return
 
                 expense_data = {
+                    'user id': self.user_id,
                     'amount': amount,
                     'category': category,
                     'description': description,
@@ -565,19 +746,23 @@ class BudgetApp:
                     'recurring day': recurring_day
                 }
                 print(f"Expense data is saved as {expense_data}")
-
+                if not self.db:
+                    self.db = firestore.client()
                 # Save to Firebase if available
                 if self.db:
-                    doc_ref = self.db.collection('expenses').add(expense_data)
+                    # Add user ID to ensure data isolation
+                    doc_ref = self.db.collection('users').document(self.user_id).collection('expenses').add(expense_data)
                     expense_data['id'] = doc_ref[1].id
-                    print(f"✅ Expense saved successfully with ID: {expense_data['id']}")
+                    print(f"✅ Expense saved successfully for user : {expense_data['user id']}")
                     print(f"📊 Expense data: {expense_data}")
                 else:
                     # Generate a temporary ID for local storage
                     expense_data['id'] = f"local_{len(self.expenses)}"
                     print("⚠️ Firebase not available, expense saved locally only")
 
+
                 self.expenses.append(expense_data)
+                print("Updating expense list")
                 self.update_expenses_list()
                 self.update_budget_summary()
                 self.pie_chart.sections=self.create_pie_sections()
@@ -768,8 +953,8 @@ class BudgetApp:
     def save_budget_data(self):
         """Save budget data to Firebase"""
         if not self.db:
-            print("⚠️ Firebase not initialized, cannot save budget data")
-            return
+            print("⚠️ Firebase not initialized, initializing database")
+            self.db = firestore.client()
 
         try:
             budget_data = {
@@ -780,7 +965,7 @@ class BudgetApp:
             }
 
             # Save or update budget document
-            self.db.collection('budget').document('current').set(budget_data)
+            self.db.collection('users').document(self.user_id).collection('budget').document('current').set(budget_data)
             print(f"✅ Budget data saved successfully: {budget_data}")
 
         except Exception as e:
@@ -788,12 +973,13 @@ class BudgetApp:
 
     def load_budget_data(self):
         """Load budget data from Firebase"""
+        print("entered loading budget function")
         if not self.db:
-            print("⚠️ Firebase not initialized, skipping budget data load")
-            return
+            print("⚠️ Firebase not initialized, initializing database")
+            self.db = firestore.client()
 
         try:
-            doc = self.db.collection('budget').document('current').get()
+            doc = self.db.collection('users').document(self.user_id).collection('budget').document('current').get()
             if doc.exists:
                 data = doc.to_dict()
                 self.budget_amount = data.get('amount', 0)
@@ -809,10 +995,10 @@ class BudgetApp:
         """Load expenses from Firebase"""
         if not self.db:
             print("⚠️ Firebase not initialized, skipping expenses load")
-            return
+            self.db = firestore.client()
 
         try:
-            expenses_ref = self.db.collection('expenses').order_by('timestamp', direction=firestore.Query.DESCENDING)
+            expenses_ref = self.db.collection('users').document(self.user_id).collection('expenses').order_by('timestamp', direction=firestore.Query.DESCENDING)
             docs = expenses_ref.stream()
 
             self.expenses = []
@@ -941,13 +1127,16 @@ class BudgetApp:
 
 
 
-
-
-
 def main(page: ft.Page):
-    app = BudgetApp()
-    app.main(page)
-
+    print("Main function called")  # Debug print
+    try:
+        app = BudgetApp(page)
+        print("App created successfully")  # Debug print
+    except Exception as e:
+        print(f"Error creating app: {e}")
+        page.add(ft.Text(f"Error: {e}"))
+        page.update()
 
 if __name__ == "__main__":
+    print("Starting app...")  # Debug print
     ft.app(target=main)

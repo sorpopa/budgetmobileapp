@@ -167,3 +167,4 @@ firebase-credentials.json
 __pycache__/
 *.pyc
 serviceAccountKey.json
+config.py
