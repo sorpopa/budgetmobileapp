@@ -2,10 +2,12 @@ import flet as ft
 import firebase_admin
 import requests
 from firebase_admin import credentials, firestore, auth
+from google.cloud import firestore as fire
 from datetime import datetime, date, timedelta
-import json
 import os
 from dotenv import load_dotenv
+from auth_manager import AuthManager
+from friends_manager import FriendsUI
 
 load_dotenv()
 
@@ -65,6 +67,7 @@ class FirebaseAuth:
         except Exception as e:
             return {"error": str(e)}
 
+
 class BudgetApp:
     def __init__(self, page: ft.Page):
         self.page = page
@@ -98,6 +101,7 @@ class BudgetApp:
         self.password_field = ft.TextField(label="Password", password=True, width=300)
         self.error_text = ft.Text(color=ft.colors.RED)
         self.user_info = ft.Text()
+        self.remember_user = ft.Checkbox(label='Remember me', value=False)
 
         # Create main container
         self.main_container = ft.Column(
@@ -105,7 +109,29 @@ class BudgetApp:
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=20
         )
-        self.setup_ui()
+
+        self.auth_manager = AuthManager()
+        self.initialize_firebase()
+        self.check_existing_session()
+        #self.setup_ui()
+
+    def check_existing_session(self):
+        print('Verify user session exists')
+        saved_session = self.auth_manager.load_user_session()
+        if saved_session:
+            print("A user is logged on, going to main. ")
+            # User is already logged in, go to main app
+            print(f"user id is {self.user_id} and saved user is {saved_session['user_id']}")
+            self.current_user = {}
+            self.current_user['localId'] = saved_session['user_id']
+            self.current_user['email'] = saved_session['email']
+            self.current_user['dispalyName'] = saved_session['display_name']
+            self.user_id = saved_session['user_id']
+            self.show_main()
+        else:
+            # Show login screen
+            self.setup_ui()
+
 
     def create_auth_view(self):
         """Create authentication UI"""
@@ -117,6 +143,7 @@ class BudgetApp:
                 ft.Row([
                     ft.ElevatedButton("Sign In", on_click=self.sign_in_clicked),
                     ft.ElevatedButton("Sign Up", on_click=self.sign_up_clicked),
+                    self.remember_user
                 ], alignment=ft.MainAxisAlignment.CENTER),
                 self.error_text,
                 self.user_info
@@ -143,11 +170,31 @@ class BudgetApp:
                 self.show_error(result["error"])
             else:
                 self.current_user = result
+                print(f"self.current user is {self.current_user}")
                 self.id_token = result["idToken"]
                 self.user_id = result["localId"]
+
+                if self.remember_user:
+                    self.auth_manager.save_user_session(user_id=self.user_id, email=email)
+
                 self.show_main()
         except Exception as e:
             self.show_error(f"Sign in error: {str(e)}")
+
+    def create_user_profile(self, user_id, email, display_name=None):
+        try:
+            user_data = {
+                'email': email,
+                'displayName': display_name or email.split('@')[0],
+                'createdAt': fire.SERVER_TIMESTAMP
+            }
+            db = firestore.client()
+            db.collection('users').document(user_id).set(user_data)
+
+            return {"success": True, "message": "User profile created"}
+
+        except Exception as e:
+            return {"error": str(e)}
 
     def sign_up_clicked(self, e):
         """Handle sign up button click"""
@@ -175,7 +222,15 @@ class BudgetApp:
                 self.current_user = result
                 self.id_token = result["idToken"]
                 self.user_id = result["localId"]
+
+                self.create_user_profile(self.user_id, email)
+
+                if self.remember_user:
+                    self.auth_manager.save_user_session(user_id=self.user_id, email=email)
+
                 self.show_main()
+
+
         except Exception as e:
             self.show_error(f"Sign up error: {str(e)}")
 
@@ -186,6 +241,8 @@ class BudgetApp:
         self.email_field.value = ""
         self.password_field.value = ""
         self.error_text.value = ""
+
+        self.auth_manager.clear_user_session()
 
         # Reset to auth view
         self.page.clean()
@@ -235,6 +292,8 @@ class BudgetApp:
 
     def show_main(self):
         # Clear the page first
+        print("Calling show_main function")
+        print(f"User id is {self.user_id}")
         self.page.clean()
 
         self.expenses_list = ft.ListView(spacing=10, padding=20, auto_scroll=True, height=300)
@@ -267,6 +326,8 @@ class BudgetApp:
         self.load_budget_data()
         self.load_expenses()
 
+        friends_ui = FriendsUI(self.page, self.user_id, self.id_token)
+
         print("Creating tabs")
 
         # Create tabs
@@ -285,6 +346,7 @@ class BudgetApp:
                     text="Expenses",
                     content=self.expenses_tab
                 ),
+                ft.Tab(text="Friends", content=friends_ui.create_friends_view())
             ],
         )
 
@@ -330,6 +392,7 @@ class BudgetApp:
 
     def create_overview_tab(self):
         """Create the overview tab with budget configuration and summary"""
+        print('Creating overview tab')
         # Budget summary
         self.budget_summary = ft.Container(
             content=ft.Column([

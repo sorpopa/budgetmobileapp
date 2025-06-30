@@ -1,20 +1,27 @@
 + add a budget and set period of time with calendar dates, start and finish
 + add cloud data storage
 - update budget summary to include start and end  month
+- reset budget at the start of the next month
 + expenses + can add expenses
             + can delete expenses
             + can edit expenses
             + can filter expenses by category
-+ add reccuring expenses that automatically update the expenses list
++ add reoccurring expenses that automatically update the expenses list
 + edit recurring expenses
 + filter recurring expenses
 + add icons to expenses
 + add button for adding expenses on the ALl Expenses page
 + add tabs to display for expenses for 1 M, 2M, 3M, 6M, 1Y, all
-- add split costs with procentage capabilities
-- create graphs
+- add split costs with percentage capabilities
+- create graphs for time periods - default 1 month
 - create a wish list with costs
 - create an upcoming expenses list
 - create a waste list
 + add users  and authentication
++ add friends
+- fix the friends view
++ remember logged user
+- add capability to create expenses from photo - with higher granularity - AI
+- add a feel good motto of the day - AI
+- move Logout button and friends management to a settings panel
 
