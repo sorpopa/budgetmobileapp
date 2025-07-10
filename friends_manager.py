@@ -4,9 +4,8 @@ from google.cloud import firestore as fire
 
 
 class FriendsManager:
-    def __init__(self, user_id, id_token):
+    def __init__(self, user_id):
         self.user_id = user_id
-        self.id_token = id_token
         self.db = firestore.client()
 
     def search_users_by_email(self, email):
@@ -142,6 +141,7 @@ class FriendsManager:
 
             for doc in friendships_ref.stream():
                 friendship_data = doc.to_dict()
+                print(f"friendship_data is {friendship_data}")
                 # Get the other user's ID
                 other_user_id = friendship_data['users'][0] if friendship_data['users'][1] == self.user_id else \
                 friendship_data['users'][1]
@@ -150,13 +150,14 @@ class FriendsManager:
                 user_doc = self.db.collection('users').document(other_user_id).get()
                 if user_doc.exists:
                     user_data = user_doc.to_dict()
+                    print(f"user data: {user_data}")
                     friends.append({
                         'userId': other_user_id,
                         'email': user_data.get('email'),
-                        'displayName': user_data.get('displayName', 'Unknown'),
+                        'displayName': user_data.get('displayName'),
                         'friendshipId': doc.id
                     })
-
+            print(f"data for friends retrieved from db: {friends}")
             return friends
         except Exception as e:
             print(f"Error getting friends: {e}")
@@ -188,14 +189,13 @@ class FriendsManager:
 
 
 class FriendsUI:
-    def __init__(self, page: ft.Page, user_id, id_token):
+    def __init__(self, page: ft.Page, user_id):
         self.page = page
         self.user_id = user_id
-        self.id_token = id_token
-        self.friends_manager = FriendsManager(user_id, id_token)
+        self.friends_manager = FriendsManager(user_id)
 
         # UI Controls
-        self.search_email_field = ft.TextField(label="Search by email", width=300)
+        self.search_email_field = ft.TextField(label="Search by email", )
         self.search_result_text = ft.Text()
         self.search_results_container = ft.Column([
             self.search_result_text
@@ -214,20 +214,24 @@ class FriendsUI:
                 ft.Text("Friends Management", size=24, weight=ft.FontWeight.BOLD),
 
                 # Search for new friends
+                ft.Row([
+                    ft.FloatingActionButton(text="Add Friend",
+                                            icon=ft.icons.ADD,
+                                            bgcolor=ft.colors.LIME_300,
+                                            data=0,
+                                            on_click=self.show_add_friend_dialog,
+                                            ),
+                ], alignment=ft.MainAxisAlignment.END),
+
+                # Current friends
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("Add New Friend", size=18, weight=ft.FontWeight.BOLD),
-                        ft.Row([
-                            self.search_email_field,
-                            ft.ElevatedButton("Search", on_click=self.search_user)
-                        ]),
-                        self.search_results_container,
-                        self.status_text,
+                        ft.Text("Your Friends", size=18, weight=ft.FontWeight.BOLD),
+                        self.friends_list
                     ]),
                     padding=10,
                     border=ft.border.all(1, ft.colors.GREY_400),
-                    border_radius=10,
-                    margin=ft.margin.only(bottom=20)
+                    border_radius=10
                 ),
 
                 # Pending friend requests
@@ -242,21 +246,14 @@ class FriendsUI:
                     margin=ft.margin.only(bottom=20)
                 ),
 
-                # Current friends
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Your Friends", size=18, weight=ft.FontWeight.BOLD),
-                        self.friends_list
-                    ]),
-                    padding=10,
-                    border=ft.border.all(1, ft.colors.GREY_400),
-                    border_radius=10
-                ),
-
-                ft.ElevatedButton("Refresh", on_click=self.refresh_clicked)
+                ft.ElevatedButton("Refresh",
+                                  bgcolor=ft.colors.LIME_300,
+                                  on_click=self.refresh_clicked)
             ]),
             padding=20
         )
+
+
 
     def search_user(self, e):
         """Search for a user by email"""
@@ -382,7 +379,7 @@ class FriendsUI:
         if friends:
             for friend in friends:
                 friend_row = ft.Row([
-                    ft.Text(f"{friend['displayName']} ({friend['email']})"),
+                    ft.Text(f"{friend['displayName']}" , color=ft.colors.GREEN_600, size=20, weight=ft.FontWeight.BOLD),
                     ft.ElevatedButton(
                         "Remove",
                         color=ft.colors.RED,
@@ -422,4 +419,31 @@ class FriendsUI:
         self.refresh_data()
         self.status_text.value = "Refreshed!"
         self.status_text.color = ft.colors.GREEN
+        self.page.update()
+
+    def show_add_friend_dialog(self, e):
+
+        self.add_friend_form_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Add New Friend"),
+            content=ft.Column([
+                ft.Text("Add New Friend", size=10, weight=ft.FontWeight.BOLD),
+                ft.Column([
+                    self.search_email_field,
+                    ft.ElevatedButton("Search", on_click=self.search_user)
+                ]),
+                self.search_results_container,
+                self.status_text,
+            ]),
+            actions=[
+                ft.TextButton("Cancel", on_click=lambda e: self.close_add_friend_dialog()),
+            ],
+        )
+
+        self.page.dialog = self.add_friend_form_dialog
+        self.add_friend_form_dialog.open = True
+        self.page.update()
+
+    def close_add_friend_dialog(self):
+        self.add_friend_form_dialog.open = False
         self.page.update()

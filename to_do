@@ -1,27 +1,52 @@
 + add a budget and set period of time with calendar dates, start and finish
 + add cloud data storage
-- update budget summary to include start and end  month
-- reset budget at the start of the next month
++ update budget summary to include start and end  month
++ reset budget at the start of the next month
++ add dots button for logout and user settings
+    + configure display name
+    + budget configuration
+    + logout
+    - password reset (i)
 + expenses + can add expenses
             + can delete expenses
             + can edit expenses
             + can filter expenses by category
+            + update expense list view to contain info about shared expenses
 + add reoccurring expenses that automatically update the expenses list
 + edit recurring expenses
 + filter recurring expenses
 + add icons to expenses
 + add button for adding expenses on the ALl Expenses page
 + add tabs to display for expenses for 1 M, 2M, 3M, 6M, 1Y, all
-- add split costs with percentage capabilities
-- create graphs for time periods - default 1 month
-- create a wish list with costs
-- create an upcoming expenses list
-- create a waste list
++ add split costs with percentage capabilities
+    + save expense to current user database
+    + save expense to friend database
+    + add sum for shared expenses
+    + add settle button with settle action
++ create graphs for time periods - default 1 month
++ display the first 3 categories with the highest expenses for selected period(i)
++ add charts tab and multiple chart types
++ create a wish list with costs and add a summary to overview
++ load wish list
++ add a "bought this" button to wish list that transforms wish into expense
 + add users  and authentication
++ add picture for user
++ add ability to configure display name
 + add friends
-- fix the friends view
++ transform the add friends in a plus sign
+- display amount owed to friend near name on friends page(i)
+- add picture and display name for friends(i)
 + remember logged user
 - add capability to create expenses from photo - with higher granularity - AI
-- add a feel good motto of the day - AI
-- move Logout button and friends management to a settings panel
++ add a feel good motto of the day - AI - timp mare de generare
+    - transforma in mesaje statice
+- add AI expense analisys - tab under expenses
+- fix adding reccursive expenses - on the exact same date, different month
+- add a flag of "impulsive buy" and a happiness meter - tab under expenses
++ add possibility to reset password - partially added, the email link is not sent - I need an smtp server/app domain
+- build SDK and test on phone
 
+Phase 2
+- notifications
+- optimize code with AI
+- unit test

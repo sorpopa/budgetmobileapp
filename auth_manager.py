@@ -2,6 +2,7 @@ import flet as ft
 import json
 import os
 from pathlib import Path
+from datetime import datetime
 
 
 class AuthManager:
@@ -21,14 +22,15 @@ class AuthManager:
             app_dir.mkdir(exist_ok=True)
             return app_dir / 'user_data.json'
 
-    def save_user_session(self, user_id, email, display_name=None):
+    def save_user_session_preference(self, preference, id_token, user_id):
         """Save user session data locally"""
         user_data = {
+            'remember_me': preference,
+            'id_token': id_token,
             'user_id': user_id,
-            'email': email,
-            'display_name': display_name,
-            'is_logged_in': True
+            'saved_at': str(datetime.now())
         }
+        print(f"Saving user session {user_data}")
 
         try:
             os.makedirs(os.path.dirname(self.user_data_file), exist_ok=True)
@@ -45,18 +47,20 @@ class AuthManager:
         print("Trying to load user data. ")
         try:
             if os.path.exists(self.user_data_file):
-                print("user data exists")
+                print(f"user data exists at {self.user_data_file} ")
                 with open(self.user_data_file, 'r') as f:
                     user_data = json.load(f)
-                    if user_data.get('is_logged_in', False):
-                        print(f"user data is {user_data.get('is_logged_in', False)}")
+                    if user_data.get('remember_me', False):
+                        print(f"user data is {user_data.get('remember_me', False)}")
                         self.current_user = user_data
-                        print(f"user data {self.current_user}")
+                        print(f"user data {user_data}")
                         return user_data
-            return None
+            else:
+                print(f"No preferences file found at: {self.user_data_file}")
+                return {"remember_user": False, "user_token": None}
         except Exception as e:
-            print(f"Error loading user session: {e}")
-            return None
+            print(f"Error loading preferences: {e}")
+            return {"remember_user": False, "user_token": None}
 
     def clear_user_session(self):
         """Clear saved user session (logout)"""
