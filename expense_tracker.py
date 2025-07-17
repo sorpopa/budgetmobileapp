@@ -92,6 +92,7 @@ class BudgetApp:
         self.end_date = datetime.now()
         self.expenses = []
         self.wishes = []
+        self.analysis = []
         self.expense_form_dialog = None
         self.wish_list_form_dialog = None
         self.edit_expense_dialog = None
@@ -366,8 +367,9 @@ class BudgetApp:
         print(f"User id is {self.user_id}")
         self.page.clean()
 
-        self.expenses_list = ft.ListView(spacing=10, padding=20, auto_scroll=True, height=300)
-        self.wish_list = ft.ListView(spacing=10, padding=20, auto_scroll=True, height=300)
+        self.expenses_list = ft.ListView(spacing=10, padding=20, auto_scroll=False, height=300)
+        self.wish_list = ft.ListView(spacing=10, padding=20, auto_scroll=False, height=300)
+        self.analysis_list = ft.ListView(spacing=10, padding=20, auto_scroll=False, height=300)
         self.waste_tracker_list = ft.ListView(spacing=10, padding=20, auto_scroll=True, height=300)
 
         self.recurring_checkbox = ft.Checkbox(label="Recurring expenses", on_change=self.update_expenses_list)
@@ -420,6 +422,7 @@ class BudgetApp:
         self.load_budget_data()
         self.load_expenses()
         self.load_wish_list()
+        self.load_analysis_list()
         self.load_settings()
         self.load_avatar()
 
@@ -444,10 +447,6 @@ class BudgetApp:
                 ft.Tab(
                     text="Expenses",
                     content=self.expenses_tab
-                ),
-                ft.Tab(
-                    text="Charts",
-                    content=self.charts_tab
                 ),
                 ft.Tab(
                     text="My Wish List",
@@ -621,23 +620,53 @@ class BudgetApp:
             width=200
         )
 
+        # Create a container to hold the tab content
+        self.tab_content = ft.Column([])
+
+        def create_selected_expense_tab(e):
+            self.tab_content.controls.clear()
+            print(f"selected index is {period_filter.selected_index}")
+
+            if period_filter.selected_index == 0:
+                print("Creating expenses list tab")
+                content = create_expenses_list_tab()
+            elif period_filter.selected_index == 1:
+                print("Creating AI analysis tab")
+                content = create_ai_analysis_tab()
+            elif period_filter.selected_index == 2:
+                print("Creating charts tab")
+                content = self.create_charts_tab()
+            else:
+                print("Creating expense review tab")
+                content = create_expense_review_tab()
+                # Add the new content
+            self.tab_content.controls.append(content)
+            print(f"Added content: {type(content)}")
+            self.tab_content.update()
+            self.page.update()  # Change this line
+
+        period_filter = ft.Tabs(is_secondary=True, selected_index=0,
+                                on_change=create_selected_expense_tab,
+                                tabs=[
+                                    ft.Tab(text="Expenses List"),
+                                    ft.Tab(text="AI Analysis"),
+                                    ft.Tab(text="Charts"),
+                                    ft.Tab(text="Expenses Review"),
+                                ])
+
         self.page.overlay.append(self.recurring_date_picker)
 
         self.update_displays()
 
-        return ft.Container(
-            content=ft.Column(
-                [ft.Row([
-                    self.category_filter,
-                    self.recurring_checkbox
-                ]),
-                    ft.Text("Expenses", size=24, weight=ft.FontWeight.BOLD),
-                    ft.Divider(),
+        def create_expenses_list_tab():
+            print("entered create_expenses_list_tab function")
+            return ft.Column([
+                    ft.Row([
+                        self.category_filter,
+                        self.recurring_checkbox
+                        ]),
                     self.period_filter,
-                    ft.Column(
-                        [self.expenses_list],
-                        scroll=ft.ScrollMode.AUTO
-                    ),
+                    self.expenses_list,
                     ft.Row([
                         ft.FloatingActionButton(icon=ft.icons.ADD,
                                                 text="Expense",
@@ -653,10 +682,44 @@ class BudgetApp:
                                                 ),
                     ], alignment=ft.MainAxisAlignment.END)
 
-                ]),
-            padding=20,
-            expand=True,
-        )
+                ])
+
+        def create_ai_analysis_tab():
+            print("entered create_ai_analysis_tab function")
+
+            return ft.Column([
+                ft.Text("Analysis is generated only for expenses logged in the last month and "
+                        "limited to once every 2 weeks to ensure meaningful insights and "
+                        "give you time to implement suggestions.", size=15, font_family='Arial',
+                        color=ft.colors.GREEN_700),
+                self.analysis_list,
+                ft.Row([
+                    ft.FloatingActionButton(
+                        icon=ft.icons.ADD,
+                        text="Generate AI Analysis",
+                        bgcolor=ft.colors.LIME_300,
+                        data=0,
+                        on_click=self.get_ai_analysis,
+                    )
+                ], alignment=ft.MainAxisAlignment.END)
+                ])
+
+        def create_expense_review_tab():
+            print("create_expense_review_tab")
+            return ft.Column([
+                ft.Text("Expense Review", size=24, weight=ft.FontWeight.BOLD),
+                ])
+
+        # Initialize with the first tab
+        self.tab_content.controls.append(create_expenses_list_tab())
+
+        return ft.Container(
+            content=ft.Column([
+                period_filter,
+                self.tab_content
+            ]))
+
+
 
     def create_wish_list_tab(self):
         return ft.Container(
@@ -1078,6 +1141,7 @@ class BudgetApp:
         """Update all display components"""
         self.update_budget_summary()
         self.update_expenses_list()
+        self.update_analysis_list()
 
     def get_recurring_period(self, period):
         nr_of_days = 0
@@ -1227,7 +1291,7 @@ class BudgetApp:
                 filtered_expenses = [exp for exp in filtered_expenses if exp['date'] >=
                                      (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d %H:%M:%S")]
 
-            for expense in reversed(filtered_expenses):
+            for expense in (filtered_expenses):
                 expense_card = ft.Card(
                     content=ft.Container(
                         content=ft.Row([
@@ -1350,6 +1414,72 @@ class BudgetApp:
                 self.wish_list.controls.append(wish_card)
 
         self.page.update()
+
+    def update_analysis_list(self, e=None):
+        print('Updating AI analysis list')
+        self.analysis_list.controls.clear()
+
+        if not self.analysis:
+            print("No entries in analysis list")
+            self.analysis_list.controls.append(
+                ft.Text("No analysis recorded yet.", color=ft.colors.GREY_600)
+            )
+        else:
+            print(f"Ai analysis list is {self.analysis}")
+            for entry in self.analysis:
+                print(f"Entry is {entry}")
+                analysis_card = ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text(f"{entry.get('analysis', '')}", selectable=True),  # Changed to match save field
+                            ft.Text(f"Date: {entry.get('date', '')}")
+                        ])
+                    )
+                )
+                self.analysis_list.controls.append(analysis_card)
+
+        self.page.update()
+
+    def get_ai_analysis(self, e=None):
+        print("generating AI analysis")
+        benchmark_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        print(benchmark_date)
+        expenses = [expense for expense in self.expenses if expense['date'] > benchmark_date]
+        # Check if there are expenses to analyze
+        if not expenses:
+            print("No expenses found for analysis")
+            return
+        generated_analysis = self.ai_analyst.analyze_expenses_with_ai(expenses)
+
+        def save_analysis():
+            print("Saving AI Analysis")
+            analysis_data = {
+                'analysis': generated_analysis,
+                # Make sure this matches what you're looking for in update_analysis_list
+                'date': datetime.now().strftime("%Y-%m-%d"),
+                'timestamp': firestore.SERVER_TIMESTAMP
+            }
+
+            try:
+                # Correct Firestore add method
+                doc_ref = self.db.collection('users').document(self.user_id).collection('analysis_list').add(
+                    analysis_data)
+                analysis_data['id'] = doc_ref[1].id
+
+                # Add to local list
+                self.analysis.append(analysis_data)
+
+                print("✅ Analysis saved successfully.")
+                print(f"📊 Analysis data: {analysis_data}")
+                return True
+            except Exception as e:
+                print(f"❌ Error saving analysis entries: {e}")
+                return False
+
+        # Save and update display
+        if save_analysis():
+            self.update_analysis_list()
+            self.update_displays()
 
     def show_add_budget_dialog(self, e):
         """Show dialog to configure budget"""
@@ -1565,8 +1695,23 @@ class BudgetApp:
                     print(f"📊 Expense data: {expense_data}")
 
                     if shared != "No":
+                        print(type(percentage.end_value))
+                        friend_expense_data = {
+                            'user id': self.user_id,
+                            'amount': amount,
+                            'category': category,
+                            'description': description,
+                            'impulse index': str(0),
+                            'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'timestamp': datetime.now(),
+                            'shared': self.display_name,
+                            'owe status': not owe_status,
+                            'percentage': str(100 - float(percentage.end_value)),
+                            'is recurring': is_recurring,
+                            'recurring day': recurring_day
+                        }
                         doc_ref = self.db.collection('users').document(friend_data[shared]).collection('expenses').add(
-                            expense_data)
+                            friend_expense_data)
                         expense_data['id'] = doc_ref[1].id
 
                 else:
@@ -1681,7 +1826,7 @@ class BudgetApp:
     def pick_from_gallery(self, e):
         """Pick image from gallery"""
         self.file_picker.pick_files(
-            allow_multiple=False,
+            allow_multiple=True,
             allowed_extensions=['jpg', 'jpeg', 'png', 'webp'],
             dialog_title="Select from Gallery",
             file_type=ft.FilePickerFileType.IMAGE
@@ -2299,6 +2444,30 @@ class BudgetApp:
         except Exception as e:
             print(f"❌ Error loading wishes: {e}")
 
+    def load_analysis_list(self):
+        """Load wish list from Firebase"""
+        if not self.db:
+            print("⚠️ Firebase not initialized, skipping expenses load")
+            self.db = firestore.client()
+
+        try:
+            analysis_list_ref = self.db.collection('users').document(self.user_id).collection('analysis_list').order_by(
+                'timestamp', direction=firestore.Query.DESCENDING)
+            docs = analysis_list_ref.stream()
+
+            self.analysis = []
+            for doc in docs:
+                analysis_data = doc.to_dict()
+                analysis_data['id'] = doc.id
+                self.analysis.append(analysis_data)
+            print(f"✅ Loaded {len(self.analysis)} entries from Firebase")
+
+            self.update_analysis_list()
+
+
+        except Exception as e:
+            print(f"❌ Error loading analysis entries: {e}")
+
     def settle_expense(self, amount, friend):
         friends = self.get_friend_data()
         expense_data = {
@@ -2636,7 +2805,7 @@ class BudgetApp:
         pie_sections = [ft.PieChartSection(
             value=amount,
             title=category,
-            radius=100,
+            radius=200,
             color=category_colors.get(category, ft.colors.GREY_500)
         )
             for category, amount in expense_categories.items()
@@ -2925,7 +3094,7 @@ class BudgetApp:
             "Review your progress regularly. A quick monthly check-in helps you stay on course and adjust as needed. "
             "Think of it like steering your ship towards your goals."
         ]
-        random.choice(fallback_messages)
+        return random.choice(fallback_messages)
 
 
 def main(page: ft.Page):

@@ -123,6 +123,119 @@ class ClaudeUtilityFunctions:
                 "date": datetime.now().strftime('%Y-%m-%d')
             }
 
+    def create_expense_analysis_prompt(self, expenses_data, analysis_period="month"):
+
+        formatted_expenses = []
+        for expense in expenses_data:
+            formatted_expenses.append(
+                f"{expense['date']}, {expense['category']}, {expense['amount']:.2f}, "
+                f"{expense['description']}, {'Yes' if expense['is recurring'] else 'No'}, "
+            )
+
+        expenses_text = "\n".join(formatted_expenses)
+        prompt = f"""
+            You are a personal finance analyst AI. Analyze the following {analysis_period} expense data and 
+            provide comprehensive insights.
+
+            **Expense Data:**
+            {expenses_text}
+
+            **Analysis Requirements:**
+            Please provide a detailed analysis covering:
+
+            1. **Spending Overview**
+               - Total spending for the {analysis_period}
+               - Average daily spending
+               - Top 5 expense categories by amount
+
+            2. **Spending Patterns**
+               - Identify trends over time
+               - Any concerning patterns
+               - Most/least expensive days
+
+            3. **Category Analysis**
+               - Breakdown by category (percentage and amounts)
+               - Which categories dominate spending
+               - Comparison to recommended budget percentages:
+                 * Housing: 25-30%
+                 * Food: 10-15%
+                 * Transportation: 10-15%
+                 * Entertainment: 5-10%
+                 * Utilities: 5-10%
+
+            4. **Recurring vs One-time Expenses**
+               - Total recurring vs one-time expenses
+               - Monthly recurring expense burden
+               - Largest recurring expenses
+
+            5. **Key Insights & Recommendations**
+               - **Top 3 areas for potential savings**
+               - **Unusual spending patterns**
+               - **Budget optimization suggestions**
+               - **Action items for next {analysis_period}**
+
+            6. **Financial Health Score**
+               - Rate spending discipline (1-10)
+               - Key strengths and weaknesses
+               - Warning signs (if any)
+
+            **Output Requirements:**
+            - Use clear headings and bullet points
+            - Include specific dollar amounts and percentages
+            - Provide actionable recommendations
+            - Highlight key insights in **bold**
+            - Keep explanations clear and practical
+            - End with 3 specific action items
+            """
+        return prompt
+
+    def analyze_expenses_with_ai(self,expenses_list):
+        print("Enterring analyze_expenses_with_ai function")
+        prompt = self.create_expense_analysis_prompt(expenses_list, "month")
+        print(f"prompt for AI is : {self.prompt}")
+        system_message = """You are a personal finance analyst AI. You MUST analyze the specific expense data provided by the user. 
+            Do NOT provide generic financial advice. 
+            Do NOT give general tips about emergency funds, debt, or investments.
+            You must ONLY analyze the actual expense transactions provided in the user's message.
+            If no expense data is provided, say 'No expense data found to analyze.'"""
+
+        headers = {
+            'Content-Type': 'application/json',
+            'X-API-Key': self.api_key,
+            'anthropic-version': '2023-06-01'
+        }
+
+        data = {
+            'model': 'claude-3-7-sonnet-latest',
+            'max_tokens': 1024,
+            'system': system_message,
+            'messages': [
+                {'role': 'user', 'content': prompt}
+            ]
+        }
+
+        response = requests.post(
+                self.api_url,
+                headers=headers,
+                json=data,
+                verify=False  # Note: Using verify=False is not recommended for production
+            )
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}")
+            print(f"Response: {response.text}")
+            return None
+
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}")
+            print(f"Response: {response.text}")
+            return None
+
+        result = response.json()
+        ai_analysis = result['content'][0]['text']
+        print(f"response from AI is : {ai_analysis}")
+
+        return ai_analysis
+
 
     def generate__advice_with_fallback(self):
         print("generating advice with claude")

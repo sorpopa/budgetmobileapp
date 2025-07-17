@@ -36,17 +36,32 @@
 + transform the add friends in a plus sign
 - display amount owed to friend near name on friends page(i)
 - add picture and display name for friends(i)
++ for shared expenses written in the friend's account modify:
+        + userId should display a value, but not the actual user id
+        + shared field should contain the email of the friend creating the id
+        + owe status should be the reverse of the status of the one creating the expense
+        + also percentage should be 100-what the user configured
 + remember logged user
-- add capability to create expenses from photo - with higher granularity - AI
++ add capability to create expenses from photo - with higher granularity - AI
 + add a feel good motto of the day - AI - timp mare de generare
-    - transforma in mesaje statice
-- add AI expense analisys - tab under expenses
-- fix adding reccursive expenses - on the exact same date, different month
+    + transform in mesaje statice
+- add AI expense analysis
+        + new tab
+        + should use data for the last month
+        - one analysis for month and one using the last 3 months
+        + save analysis and display all analysis with date
+- fix adding recursive expenses - on the exact same date, different month
+- display all expenses percentages vs recommended percentages on the main page
+- display percentage on pie chart
 - add a flag of "impulsive buy" and a happiness meter - tab under expenses
 + add possibility to reset password - partially added, the email link is not sent - I need an smtp server/app domain
 - build SDK and test on phone
 
 Phase 2
 - notifications
+- password reset
+- add the possibility to configure multiple budgets : vacation, savings
+- add goals
+- add income
 - optimize code with AI
 - unit test
