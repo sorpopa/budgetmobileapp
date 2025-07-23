@@ -10,7 +10,8 @@ import os
 from dotenv import load_dotenv
 import random
 import base64
-import re
+from dateutil.relativedelta import relativedelta
+
 
 import ai_utilities
 from auth_manager import AuthManager
@@ -102,6 +103,7 @@ class BudgetApp:
         self.uploaded_image = None
         self.processed_expense_data = None
         self.file_picker = None
+        self.recurring_only = False
 
         # Firebase configuration
         self.API_KEY = os.getenv('FIREBASE_API_KEY')
@@ -367,23 +369,14 @@ class BudgetApp:
         print(f"User id is {self.user_id}")
         self.page.clean()
 
-        self.expenses_list = ft.ListView(spacing=10, padding=20, auto_scroll=False, height=300)
+        self.expenses_list = ft.ListView(spacing=10, padding=20, auto_scroll=False, height=500)
         self.wish_list = ft.ListView(spacing=10, padding=20, auto_scroll=False, height=300)
         self.analysis_list = ft.ListView(spacing=10, padding=20, auto_scroll=False, height=300)
-        self.waste_tracker_list = ft.ListView(spacing=10, padding=20, auto_scroll=True, height=300)
 
         self.recurring_checkbox = ft.Checkbox(label="Recurring expenses", on_change=self.update_expenses_list)
         self.filter_category_options = [ft.dropdown.Option("All")]
         self.filter_category_options += self.show_expense_category()
-        self.category_filter = ft.Dropdown(
-            label="Filter by Category",
-            options=self.filter_category_options,
-            value="All",
-            width=200,
-            # Flet automatically passes an event parameter to the method, that is why it was needed to add e=None as a parameter
-            # to update_all_expenses_list()
-            on_change=self.update_expenses_list
-        )
+
 
         self.period_filter = ft.Tabs(is_secondary=True, selected_index=0,
                                      on_change=self.update_expenses_list,
@@ -436,7 +429,7 @@ class BudgetApp:
         self.charts_tab = self.create_charts_tab()
         self.wish_list_tab = self.create_wish_list_tab()
 
-        tabs = ft.Tabs(
+        self.tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
             tabs=[
@@ -454,9 +447,10 @@ class BudgetApp:
                 ),
                 ft.Tab(text="Friends", content=friends_ui.create_friends_view())
             ],
+            expand=True
         )
 
-        self.page.add(tabs)
+        self.page.add(self.tabs)
 
     def test_firebase_connection(self):
         """Test Firebase connection and display current data"""
@@ -497,7 +491,6 @@ class BudgetApp:
         """Create the overview tab with budget configuration and summary"""
         print('Creating overview tab')
 
-
         advice_text = self.generate_themed_advice()
 
         advice_display = ft.Text(
@@ -512,13 +505,39 @@ class BudgetApp:
         self.budget_summary = ft.Container(
             content=ft.Column([
                 ft.Text("Budget Summary", size=20, weight=ft.FontWeight.BOLD),
-                ft.Divider(),
+                #ft.Divider(),
             ]),
-            padding=20,
-            border=ft.border.all(1, ft.colors.GREY_400),
-            border_radius=10,
-            margin=ft.margin.only(top=20)
+            padding=10,
+            #border=ft.border.all(1, ft.colors.GREY_400),
+            #border_radius=10,
+           # margin=ft.margin.only(top=20)
         )
+
+        self.budget_progress_card = ft.Container(
+                content=ft.Column([
+                        ft.Row([
+                            ft.Text("Budget Progress", size=16, weight=ft.FontWeight.BOLD),
+                            ])])
+                        )
+        self.quick_insights_row = ft.Container(
+                content=ft.Column([
+                        ft.Row([
+                            ft.Text("Insights card", size=16, weight=ft.FontWeight.BOLD),
+                            ])])
+                        )
+        self.highest_expenses_card = ft.Container(
+                content=ft.Column([
+                        ft.Row([
+                            ft.Text("Expense card", size=16, weight=ft.FontWeight.BOLD),
+                            ])])
+                        )
+        self.recent_transactions_card = ft.Container(
+                content=ft.Column([
+                        ft.Row([
+                            ft.Text("Recent Transactions", size=16, weight=ft.FontWeight.BOLD),
+                            ])])
+                        )
+
         self.nugget = ft.Container(
             content=ft.Column([
                 ft.Text("Advice of the day", size=20, weight=ft.FontWeight.BOLD),
@@ -552,42 +571,500 @@ class BudgetApp:
                 color=ft.colors.GREY_400, )
         )
 
-
-
         self.update_budget_summary()
-
+        self.create_budget_progress_card()
+        self.create_quick_insights_row()
+        self.create_highest_expenses_card()
+        self.create_recent_transactions_card()
 
         return ft.Container(
             content=ft.ListView([
-                ft.Row([
+                # Header with avatar and settings
+                self.create_header_section(),
+
+                # Motivational quote (moved to bottom, smaller)
+                self.create_quote_section(),
+
+                # Key metrics cards row
+                self.budget_summary,
+
+                # Budget progress card
+                self.budget_progress_card,
+
+                # Quick insights row (shared expenses + weekly trend)
+                self.quick_insights_row,
+
+                # Highest expenses card
+                self.highest_expenses_card,
+
+                # Recent transactions preview
+                self.recent_transactions_card,
+
+            ], spacing=20, padding=ft.padding.all(0)),
+            padding=ft.padding.all(20),
+            bgcolor=ft.colors.GREY_50,  # Light background for better contrast,
+
+        )
+
+    def create_header_section(self):
+        print("Creating header section")
+        return ft.Container(
+            content=ft.Row([
                 ft.Row([
                     self.main_avatar_container,
-                    ft.Text(f"Welcome, {self.current_user['displayName']}", size=18),]),
-                    self.open_settings_menu(),
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Divider(),
-                advice_display,
-                ft.Divider(),
-                self.budget_summary,
-                self.pie_filter,
+                    ft.Column([
+                        ft.Text(f"Welcome back!", size=14, color=ft.colors.GREY_600),
+                        ft.Text(f"{self.current_user['displayName']}", size=18, weight=ft.FontWeight.BOLD),
+                    ], spacing=0),
+                ], spacing=12),
                 ft.Row([
                     ft.Container(
-                        content=self.get_highest_expenses(),
-                        expand=1,  # Takes 1 part of available space
-                        padding=10
+                        content=ft.Row([
+                            ft.Icon(ft.icons.ADD_CIRCLE, size=18, color=ft.colors.WHITE),
+                            ft.Text("Add Expense", size=12, weight=ft.FontWeight.W_600, color=ft.colors.WHITE)
+                        ], spacing=10),
+                        padding=ft.padding.symmetric(horizontal=20, vertical=14),
+                        bgcolor=ft.colors.GREEN_600,
+                        border_radius=12,
+                        border=ft.border.all(1, ft.colors.GREEN_200),
+                        on_click=self.show_add_expense_dialog,
+                        ink=True,  # Adds ripple effect
+                        # Add shadow for depth
+                        shadow=ft.BoxShadow(
+                            spread_radius=0,
+                            blur_radius=8,
+                            color=ft.colors.with_opacity(0.3, ft.colors.GREEN_600),
+                            offset=ft.Offset(0, 3)
+                        ),
+                    ),
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Icon(ft.icons.CAMERA_ALT, size=18, color=ft.colors.BLUE_700),
+                            ft.Text("From Picture", size=12, weight=ft.FontWeight.W_600, color=ft.colors.BLUE_700)
+                        ], spacing=10),
+                        padding=ft.padding.symmetric(horizontal=20, vertical=14),
+                        bgcolor=ft.colors.WHITE,
+                        border_radius=16,
+                        border=ft.border.all(2, ft.colors.BLUE_600),
+                        on_click=self.add_expense_from_picture_dialog,
+                        ink=True,
+                        # Add subtle shadow
+                        shadow=ft.BoxShadow(
+                            spread_radius=0,
+                            blur_radius=6,
+                            color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                            offset=ft.Offset(0, 2)
+                        )
+                    ),
+                    self.open_settings_menu()
+                ], alignment=ft.MainAxisAlignment.END),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            margin=ft.margin.only(bottom=10)
+        )
+
+    def create_budget_progress_card(self):
+        print("Creating budget progress card from create_budget_progress_card")
+        budget_amount = self.budget_amount
+        total_expenses = self.get_total_expenses()
+        budget_used_percent = (total_expenses / budget_amount) * 100 if budget_amount > 0 else 0
+
+        # Choose color based on usage
+        if budget_used_percent < 50:
+            progress_color = ft.colors.GREEN_400
+            bg_color = ft.colors.GREEN_50
+        elif budget_used_percent < 80:
+            progress_color = ft.colors.ORANGE_400
+            bg_color = ft.colors.ORANGE_50
+        else:
+            progress_color = ft.colors.RED_400
+            bg_color = ft.colors.RED_50
+
+        # Calculate daily average and days remaining
+        daily_average = self.get_daily_average_spending()
+        days_remaining = self.get_days_remaining_in_budget_period()
+
+        self.budget_progress_card.content = ft.Container(
+            content=ft.Column([
+                # Header with better typography
+                ft.Row([
+                    ft.Text("Budget Progress", size=18, weight=ft.FontWeight.BOLD,
+                            color=ft.colors.GREY_800),
+                    ft.Container(
+                        content=ft.Text(f"{budget_used_percent:.1f}%",
+                                        size=16, weight=ft.FontWeight.BOLD,
+                                        color=ft.colors.WHITE),
+                        bgcolor=progress_color,
+                        padding=ft.padding.symmetric(horizontal=12, vertical=6),
+                        border_radius=20,
                     ),
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ],
-                auto_scroll=True),
-            expand=True
+
+                ft.Container(height=16),
+
+                # Enhanced progress bar with better visual treatment
+                ft.Container(
+                    content=ft.ProgressBar(
+                        value=budget_used_percent / 100,
+                        color=progress_color,
+                        bgcolor=ft.colors.GREY_100,
+                        height=12,
+                        border_radius=6
+                    ),
+                    # Add a subtle container around progress bar
+                    padding=ft.padding.all(2),
+                    bgcolor=ft.colors.GREY_50,
+                    border_radius=8,
+                ),
+
+                ft.Container(height=12),
+
+                # Better aligned range indicators
+                ft.Row([
+                    ft.Text(f"0 {self.currency}", size=12, color=ft.colors.GREY_500),
+                    ft.Text(f"{budget_amount:.0f} {self.currency}", size=12, color=ft.colors.GREY_500),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
+                ft.Container(height=16),
+
+                # Enhanced stats row with icons
+                ft.Row([
+                    ft.Row([
+                        ft.Icon(ft.icons.CALENDAR_TODAY, size=16, color=ft.colors.GREY_600),
+                        ft.Text(f"Daily avg: {daily_average:.2f} {self.currency}",
+                                size=13, color=ft.colors.GREY_600, weight=ft.FontWeight.W_500),
+                    ], spacing=6),
+                    ft.Row([
+                        ft.Icon(ft.icons.SCHEDULE, size=16, color=ft.colors.GREY_600),
+                        ft.Text(f"{days_remaining} days left",
+                                size=13, color=ft.colors.GREY_600, weight=ft.FontWeight.W_500),
+                    ], spacing=6),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ], spacing=0),
+            bgcolor=ft.colors.TEAL_50,
+            border_radius=16,
+            padding=24,
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=8,
+                color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                offset=ft.Offset(0, 2)
+            ),
+            border=ft.border.all(1, ft.colors.TEAL_300)
         )
+
+        if self.page:
+            self.page.update()
+
+    def create_quick_insights_row(self):
+        print("Creating create_quick_insights_row")
+        #owed_amount = self.get_owed_amount()
+        weekly_change = self.get_weekly_spending_change()
+
+        self.quick_insights_row.content = ft.Row([
+            # Shared expenses card with improved design
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.icons.PEOPLE_ALT, size=20, color=ft.colors.ORANGE_700),
+                        ft.Text("Shared", size=14, color=ft.colors.GREY_700,
+                                weight=ft.FontWeight.W_600),
+                    ], spacing=8),
+                    ft.Container(height=12),
+                    self.update_shared_expenses()  # Your existing method
+                ], spacing=0, alignment=ft.MainAxisAlignment.START),
+                bgcolor=ft.colors.ORANGE_50,
+                border_radius=16,
+                padding=20,
+                expand=1,
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=6,
+                    color=ft.colors.with_opacity(0.08, ft.colors.BLACK),
+                    offset=ft.Offset(0, 2)
+                ),
+                border=ft.border.all(1, ft.colors.ORANGE_300)
+            ),
+
+            # Weekly trend card with better visual hierarchy
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(
+                            ft.icons.TRENDING_UP if weekly_change >= 0 else ft.icons.TRENDING_DOWN,
+                            size=20,
+                            color=ft.colors.RED_700 if weekly_change >= 0 else ft.colors.GREEN_700
+                        ),
+                        ft.Text("This Week", size=14, color=ft.colors.GREY_700,
+                                weight=ft.FontWeight.W_600),
+                    ], spacing=8),
+                    ft.Container(height=12),
+                    ft.Text(
+                        f"{'+' if weekly_change >= 0 else ''}{weekly_change:.2f} {self.currency}",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.colors.RED_700 if weekly_change >= 0 else ft.colors.GREEN_700
+                    ),
+                    ft.Text("vs last week", size=12, color=ft.colors.GREY_500),
+                ], spacing=0, alignment=ft.MainAxisAlignment.START),
+                bgcolor=ft.colors.RED_50 if weekly_change >= 0 else ft.colors.GREEN_50,
+                border_radius=16,
+                padding=20,
+                expand=1,
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=6,
+                    color=ft.colors.with_opacity(0.08, ft.colors.BLACK),
+                    offset=ft.Offset(0, 2)
+                ),
+                border=ft.border.all(1, ft.colors.RED_300 if weekly_change >= 0 else ft.colors.GREEN_300)
+            ),
+        ], spacing=15)
+
+        if self.page:
+            self.page.update()
+
+    def create_recent_transactions_card(self):
+        print("creating recent transactions card")
+        recent_transactions = self.get_recent_transactions(limit=4)  # Get last 4 transactions
+        transaction_rows = []
+        for transaction in recent_transactions:
+            transaction_rows.append(
+                ft.Container(
+                content=ft.Row([
+                    ft.Icon(
+                        self.get_category_icon(transaction['category']),
+                        size=16,
+                        color=ft.colors.TEAL_800
+                    ),
+                    ft.Text(transaction['category'], size=12, color=ft.colors.GREY_600),
+                    ft.Column([
+                        ft.Text(transaction['description'], size=14, weight=ft.FontWeight.BOLD),
+                    ], spacing=0, expand=1),
+                    ft.Text(f"-{transaction['amount']:.2f} Lei", size=14, weight=ft.FontWeight.BOLD,
+                            color=ft.colors.RED_600),
+                ], spacing=10),
+             bgcolor=ft.colors.TEAL_100
+            ))
+
+        self.recent_transactions_card.content = ft.Container(
+            content=ft.Column([
+                # Improved header with better spacing
+                ft.Row([
+                    ft.Container(
+                        content=ft.Icon(ft.icons.RECEIPT_LONG, size=24, color=ft.colors.WHITE),
+                        bgcolor=ft.colors.TEAL_600,
+                        padding=8,
+                        border_radius=8,
+                    ),
+                    ft.Text("Recent Transactions", size=18, weight=ft.FontWeight.BOLD,
+                            color=ft.colors.GREY_800),
+                    ft.Container(
+                        content=ft.ElevatedButton(
+                                    "View All",
+                                    on_click=lambda _: self.switch_to_expenses_tab(),
+                                    style=ft.ButtonStyle(
+                                    color=ft.colors.WHITE,
+                                    bgcolor=ft.colors.TEAL_600,
+                                )
+                            ),
+                    ),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
+                ft.Container(height=16),
+
+                # Your existing transaction content
+                ft.Column(transaction_rows, spacing=12) if transaction_rows else
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(ft.icons.RECEIPT_OUTLINED, size=48, color=ft.colors.GREY_300),
+                        ft.Text("No recent transactions", size=14, color=ft.colors.GREY_500),
+                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+                    padding=ft.padding.all(24),
+                    alignment=ft.alignment.center,
+                ),
+            ], spacing=0),
+            bgcolor=ft.colors.WHITE,
+            border_radius=16,
+            padding=24,
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=8,
+                color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                offset=ft.Offset(0, 2)
+            )
+        )
+        if self.page:
+            self.page.update()
+
+    def create_highest_expenses_card(self):
+
+        self.highest_expenses_card.content = ft.Container(
+            content=ft.Column([
+            # Better header design
+                ft.Row([
+                    ft.Container(
+                        content=ft.Icon(ft.icons.BAR_CHART, size=24, color=ft.colors.WHITE),
+                        bgcolor=ft.colors.BLUE_600,
+                        padding=8,
+                        border_radius=8,
+                    ),
+                    ft.Text("Top Categories", size=18, weight=ft.FontWeight.BOLD,
+                        color=ft.colors.GREY_800),
+                ], spacing=12),
+
+                ft.Container(height=16),
+
+            # Your existing content method
+            self.get_highest_expenses(),
+            ], spacing=0),
+            bgcolor=ft.colors.PURPLE_50,
+            border_radius=16,
+            padding=24,
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=8,
+                color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                offset=ft.Offset(0, 2)
+                ),
+            border=ft.border.all(1, ft.colors.PURPLE_300)
+            )
+        if self.page:
+            self.page.update()
+
+    def create_quote_section(self):
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Container(
+                        content=ft.Icon(ft.icons.LIGHTBULB_OUTLINE, size=20, color=ft.colors.WHITE),
+                        bgcolor=ft.colors.GREEN_600,
+                        padding=8,
+                        border_radius=8,
+                    ),
+                    ft.Text("Daily Tip", size=16, weight=ft.FontWeight.BOLD,
+                           color=ft.colors.GREY_800),
+                ], spacing=12),
+
+                ft.Container(height=12),
+
+                ft.Text(
+                    f"{self.generate_themed_advice()}",
+                    size=13,
+                    color=ft.colors.GREY_600,
+                    text_align=ft.TextAlign.LEFT,
+                    weight=ft.FontWeight.W_400
+                ),
+            ], spacing=0),
+            bgcolor=ft.colors.GREEN_50,
+            border_radius=16,
+            padding=20,
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=6,
+                color=ft.colors.with_opacity(0.08, ft.colors.BLACK),
+                offset=ft.Offset(0, 2)
+            ),
+            border=ft.border.all(1, ft.colors.GREEN_200)
+        )
+
+    def get_daily_average_spending(self):
+        print("calculating average spending with function get_daily_average_spending")
+        # Calculate based on total expenses and days in current period
+        total_expenses = self.get_total_expenses()
+        days_elapsed = self.get_days_elapsed_in_budget_period()
+        return total_expenses / days_elapsed if days_elapsed > 0 else 0
+
+    def get_days_remaining_in_budget_period(self):
+        print("calculating days remaining with get_days_remaining_in_budget_period")
+        print(f"type of end date is {type(self.end_date)}")
+        end_datetime = self.end_date.replace(tzinfo=None)  # Remove timezone info if present
+        current_datetime = datetime.now()
+
+        # Calculate the difference
+        date_difference = end_datetime - current_datetime
+
+        # Get the number of days
+        days_between = date_difference.days
+        # Calculate remaining days in budget period
+        return days_between
+
+    def get_days_elapsed_in_budget_period(self):
+        print("calculating days elapsed with get_days_elapsed_in_budget_period")
+        # Calculate elapsed days in budget period
+        start_datetime = self.start_date.replace(tzinfo=None)  # Remove timezone info if present
+        current_datetime = datetime.now()
+
+        # Calculate the difference
+        date_difference = current_datetime - start_datetime
+
+        # Get the number of days
+        days_between = date_difference.days
+
+        return days_between
+
+    def get_weekly_spending_change(self):
+        print("Entering get_weekly_spending_change")
+        # Compare this week vs last week spending
+        # Get current date and calculate week boundaries
+        today = datetime.now()
+
+        # Get start of current week (Monday)
+        days_since_monday = today.weekday()
+        this_week_start = today - timedelta(days=days_since_monday)
+        this_week_start = this_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Get start of last week
+        last_week_start = this_week_start - timedelta(days=7)
+        last_week_end = this_week_start
+
+        this_week_total = 0
+        last_week_total = 0
+
+        for expense in self.expenses:
+            # Convert date to datetime if it's a string
+            if isinstance(expense['date'], str):
+                expense_date = datetime.strptime(expense['date'], '%Y-%m-%d %H:%M:%S')
+            else:
+                expense_date = expense['date']
+
+            # Remove time component for comparison
+            expense_date = expense_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            # Check if expense is in current week
+            if this_week_start <= expense_date <= today:
+                this_week_total += expense['amount']
+
+            # Check if expense is in previous week
+            elif last_week_start <= expense_date < last_week_end:
+                last_week_total += expense['amount']
+
+        # Calculate difference and percentage change
+        difference = this_week_total - last_week_total
+
+        if last_week_total == 0:
+            percentage_change = 100 if this_week_total > 0 else 0
+        else:
+            percentage_change = (difference / last_week_total) * 100
+
+
+        return difference
+
+    def get_recent_transactions(self, limit=4):
+        return self.expenses[:limit]
+
+    def switch_to_expenses_tab(self):
+        """Navigate to Expenses tab when View All is clicked"""
+        if self.tabs:
+            self.tabs.selected_index = 1  # Index 1 = Expenses tab
+            self.page.update()
+
 
     def create_expenses_tab(self):
         """Create the expenses tab with list of all expenses"""
         print("Creating expense tab")
 
         self.recurring_period = ft.Dropdown(
-            label="Is Recurring",
+            label="Occurrence",
             options=[ft.dropdown.Option("No"),
                      ft.dropdown.Option("Monthly"),
                      ft.dropdown.Option("Yearly"),
@@ -604,6 +1081,16 @@ class BudgetApp:
             value="No",
             width=200,
         )
+        occurence_options = ["All", "Periodic", "Not Periodic"]
+        self.filter_ocurrence_options = []
+        for option in occurence_options:
+            self.filter_ocurrence_options.append(ft.dropdown.Option(option))
+
+        filter_period_options = ["1M", "2M", "3M", "6M", "12M", "All"]
+        self.filter_period_options = []
+        for option in filter_period_options:
+            self.filter_period_options.append(ft.dropdown.Option(option))
+
 
         self.recurring_day = datetime.now()
         self.recurring_date_picker = ft.DatePicker(
@@ -621,19 +1108,64 @@ class BudgetApp:
         )
 
         # Create a container to hold the tab content
-        self.tab_content = ft.Column([])
+        self.tab_content = ft.Column([], expand=True)
+
+        self.analysis_button = ft.FloatingActionButton(
+            icon=ft.icons.ADD,
+            text="Generate AI Analysis",
+            bgcolor=ft.colors.LIME_300,
+            data=0,
+            on_click=self.get_ai_analysis,
+        )
+        self.analysis_status_text = ft.Text("", color=ft.colors.GREY_600)
+
+        self.category_filter = ft.Dropdown(
+            label="Filter by Category",
+            options=self.filter_category_options,
+            value="All",
+            width=200,
+            bgcolor=ft.colors.GREEN_50,
+            border_color=ft.colors.GREEN_300,
+            border_radius=12,
+            content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
+            on_change=self.update_expenses_list
+        )
+        self.time_period_filter = ft.Dropdown(
+            label="Filter by Period",
+            options=self.filter_period_options,
+            value="1M",
+            width=200,
+            bgcolor=ft.colors.GREEN_50,
+            border_color=ft.colors.GREEN_300,
+            border_radius=12,
+            content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
+            on_change=self.update_expenses_list
+        )
+
+        self.occurence_filter = ft.Dropdown(
+            label="Filter by Occurrence",
+            options=self.filter_ocurrence_options,
+            value="All",
+            width=200,
+            bgcolor=ft.colors.GREEN_50,
+            border_color=ft.colors.GREEN_300,
+            border_radius=12,
+            content_padding=ft.padding.symmetric(horizontal=16, vertical=14),
+            on_change=self.update_expenses_list
+        )
+
 
         def create_selected_expense_tab(e):
             self.tab_content.controls.clear()
-            print(f"selected index is {period_filter.selected_index}")
+            print(f"selected index is {expense_tab_selector.selected_index}")
 
-            if period_filter.selected_index == 0:
+            if expense_tab_selector.selected_index == 0:
                 print("Creating expenses list tab")
                 content = create_expenses_list_tab()
-            elif period_filter.selected_index == 1:
+            elif expense_tab_selector.selected_index == 1:
                 print("Creating AI analysis tab")
                 content = create_ai_analysis_tab()
-            elif period_filter.selected_index == 2:
+            elif expense_tab_selector.selected_index == 2:
                 print("Creating charts tab")
                 content = self.create_charts_tab()
             else:
@@ -645,13 +1177,28 @@ class BudgetApp:
             self.tab_content.update()
             self.page.update()  # Change this line
 
-        period_filter = ft.Tabs(is_secondary=True, selected_index=0,
+        expense_tab_selector = ft.Tabs(is_secondary=True, selected_index=0,
                                 on_change=create_selected_expense_tab,
+                                indicator_color=ft.colors.BLUE_600,
+                                label_color=ft.colors.BLUE_600,
+                                unselected_label_color=ft.colors.GREY_600,
                                 tabs=[
-                                    ft.Tab(text="Expenses List"),
-                                    ft.Tab(text="AI Analysis"),
-                                    ft.Tab(text="Charts"),
-                                    ft.Tab(text="Expenses Review"),
+                                    ft.Tab(
+                                        text="Expenses",
+                                        icon=ft.icons.RECEIPT_LONG
+                                    ),
+                                    ft.Tab(
+                                        text="AI Insights",
+                                        icon=ft.icons.AUTO_AWESOME
+                                    ),
+                                    ft.Tab(
+                                        text="Charts",
+                                        icon=ft.icons.BAR_CHART
+                                    ),
+                                    ft.Tab(
+                                        text="Review",
+                                        icon=ft.icons.RATE_REVIEW
+                                    ),
                                 ])
 
         self.page.overlay.append(self.recurring_date_picker)
@@ -660,49 +1207,138 @@ class BudgetApp:
 
         def create_expenses_list_tab():
             print("entered create_expenses_list_tab function")
-            return ft.Column([
+            return ft.Container(
+                content=ft.Column([
+                        ft.Row([
+                            ft.Container(
+                                content=ft.Row([
+                                    ft.Icon(ft.icons.ADD_CIRCLE, size=18, color=ft.colors.WHITE),
+                                    ft.Text("Add Expense", size=12, weight=ft.FontWeight.W_600, color=ft.colors.WHITE)
+                                ], spacing=10),
+                                padding=ft.padding.symmetric(horizontal=20, vertical=14),
+                                bgcolor=ft.colors.GREEN_600,
+                                border_radius=12,
+                                border=ft.border.all(1, ft.colors.GREEN_200),
+                                on_click=self.show_add_expense_dialog,
+                                ink=True,  # Adds ripple effect
+                                # Add shadow for depth
+                                shadow=ft.BoxShadow(
+                                    spread_radius=0,
+                                    blur_radius=8,
+                                    color=ft.colors.with_opacity(0.3, ft.colors.GREEN_600),
+                                    offset=ft.Offset(0, 3)
+                                ),
+                            ),
+                            ft.Container(
+                                content=ft.Row([
+                                    ft.Icon(ft.icons.CAMERA_ALT, size=18, color=ft.colors.BLUE_700),
+                                    ft.Text("From Picture", size=12, weight=ft.FontWeight.W_600,
+                                            color=ft.colors.BLUE_700)
+                                ], spacing=10),
+                                padding=ft.padding.symmetric(horizontal=20, vertical=14),
+                                bgcolor=ft.colors.WHITE,
+                                border_radius=16,
+                                border=ft.border.all(2, ft.colors.BLUE_600),
+                                on_click=self.add_expense_from_picture_dialog,
+                                ink=True,
+                                # Add subtle shadow
+                                shadow=ft.BoxShadow(
+                                    spread_radius=0,
+                                    blur_radius=6,
+                                    color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                                    offset=ft.Offset(0, 2)
+                                )
+                            ),
+                        ], alignment=ft.MainAxisAlignment.END),
                     ft.Row([
-                        self.category_filter,
-                        self.recurring_checkbox
-                        ]),
-                    self.period_filter,
+                        ft.Container(content=self.category_filter),
+                        ft.Container(content=self.time_period_filter),
+                        ft.Container(content=self.occurence_filter),
+                    ]
+                    ),
                     self.expenses_list,
-                    ft.Row([
-                        ft.FloatingActionButton(icon=ft.icons.ADD,
-                                                text="Expense",
-                                                bgcolor=ft.colors.LIME_300,
-                                                data=0,
-                                                on_click=self.show_add_expense_dialog,
-                                                ),
-                        ft.FloatingActionButton(icon=ft.icons.PHOTO,
-                                                text="From Picture",
-                                                bgcolor=ft.colors.LIME_300,
-                                                data=0,
-                                                on_click=self.add_expense_from_picture_dialog,
-                                                ),
-                    ], alignment=ft.MainAxisAlignment.END)
 
                 ])
+            )
 
         def create_ai_analysis_tab():
             print("entered create_ai_analysis_tab function")
+            self.update_analysis_button_state()
+            # Header section with icon and title
+            header_section = ft.Container(
+                content=ft.Row([
+                    ft.Icon(
+                        ft.icons.AUTO_AWESOME,
+                        color=ft.colors.PURPLE_400,
+                        size=32
+                    ),
+                    ft.Column([
+                        ft.Text(
+                            "AI Insights",
+                            size=24,
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.colors.GREY_800,
+                            font_family='Arial'
+                        ),
+                        ft.Text(
+                            "Smart analysis of your spending patterns",
+                            size=14,
+                            color=ft.colors.GREY_600,
+                            font_family='Arial'
+                        )
+                    ], spacing=2, expand=True)
+                ], alignment=ft.MainAxisAlignment.START),
+                padding=ft.padding.all(20),
+                bgcolor=ft.colors.WHITE,
+                border_radius=16,
+                margin=ft.margin.only(bottom=16)
+            )
 
-            return ft.Column([
-                ft.Text("Analysis is generated only for expenses logged in the last month and "
-                        "limited to once every 2 weeks to ensure meaningful insights and "
-                        "give you time to implement suggestions.", size=15, font_family='Arial',
-                        color=ft.colors.GREEN_700),
-                self.analysis_list,
-                ft.Row([
-                    ft.FloatingActionButton(
-                        icon=ft.icons.ADD,
-                        text="Generate AI Analysis",
-                        bgcolor=ft.colors.LIME_300,
-                        data=0,
-                        on_click=self.get_ai_analysis,
+            info_card = ft.Container(
+                content=ft.Row([
+                    ft.Icon(
+                        ft.icons.INFO_OUTLINE,
+                        color=ft.colors.BLUE_400,
+                        size=20
+                    ),
+                    ft.Text(
+                        "Analysis updates every 2 weeks based on your recent expenses to provide "
+                        "meaningful insights and time for implementing suggestions.",
+                        size=14,
+                        color=ft.colors.BLUE_700,
+                        font_family='Arial',
+                        expand=True
                     )
-                ], alignment=ft.MainAxisAlignment.END)
-                ])
+                ], spacing=12),
+                padding=ft.padding.all(16),
+                bgcolor=ft.colors.BLUE_50,
+                border_radius=12,
+                border=ft.border.all(1, ft.colors.BLUE_200),
+                margin=ft.margin.only(bottom=20)
+            )
+
+            # Analysis content area
+            analysis_content = ft.Container(
+                content=ft.Column([
+                    self.analysis_list,
+                    self.analysis_status_text
+                ], spacing=16),
+                expand=True
+            )
+
+            return ft.Container(
+                content=ft.Column([
+                header_section,
+                info_card,
+                ft.Row([
+                    self.analysis_status_text,
+                    self.analysis_button
+                ], alignment=ft.MainAxisAlignment.END),
+                self.analysis_list,
+                ]),
+                expand=True,
+                adaptive=True
+            )
 
         def create_expense_review_tab():
             print("create_expense_review_tab")
@@ -715,11 +1351,55 @@ class BudgetApp:
 
         return ft.Container(
             content=ft.Column([
-                period_filter,
-                self.tab_content
-            ]))
+                expense_tab_selector,
+                ft.Container(
+                    content=self.tab_content,
+                    expand=True,
+                    padding=ft.padding.all(0)
+                )
+            ]), expand=True)
 
 
+
+    def update_analysis_button_state(self):
+        """Update button state based on cooldown period"""
+        if not self.analysis:
+            self.analysis_button.disabled = False
+            self.analysis_button.text = "Generate AI Analysis"
+            self.analysis_status_text.value = ""
+            return
+        latest_analysis = max(self.analysis, key=lambda x: x.get('date', ''))
+        latest_date_str = latest_analysis.get('date', '')
+
+        if not latest_date_str:
+            self.analysis_button.disabled = False
+            self.analysis_button.text = "Generate AI Analysis"
+            self.analysis_status_text.value = ""
+            return
+
+        try:
+            latest_date = datetime.strptime(latest_date_str, "%Y-%m-%d")
+            days_since_last = (datetime.now() - latest_date).days
+
+            if days_since_last < 14:
+                days_remaining = 14 - days_since_last
+                self.analysis_button.disabled = True
+                self.analysis_button.text = "AI Analysis"
+                self.analysis_button.bgcolor = ft.colors.GREY_400
+                self.analysis_status_text.value = f"Next analysis available in {days_remaining} days"
+            else:
+                self.analysis_button.disabled = False
+                self.analysis_button.text = "Generate AI Analysis"
+                self.analysis_button.bgcolor = ft.colors.LIME_300
+                self.analysis_status_text.value = ""
+        except ValueError:
+            print(f"Invalid date format: {latest_date_str}")
+            self.analysis_button.disabled = False
+            self.analysis_button.text = "Generate AI Analysis"
+            self.analysis_status_text.value = ""
+
+        if hasattr(self, 'page'):
+            self.page.update()
 
     def create_wish_list_tab(self):
         return ft.Container(
@@ -748,6 +1428,56 @@ class BudgetApp:
             padding=20,
             expand=True,
         )
+
+    def get_category_colors(self):
+        category_colors = {
+            # Essential Living - Warm, earthy tones (importance)
+            "Groceries": ft.colors.GREEN_400,
+            "Housing": ft.colors.BLUE_400,
+            "Utilities": ft.colors.ORANGE_600,
+            "Transportation": ft.colors.TEAL_600,
+            "Insurance": ft.colors.BLUE_GREY_600,
+            "Healthcare": ft.colors.LIGHT_GREEN_800,
+            # Personal Care - Soft, nurturing colors
+            "Personal Care": ft.colors.PINK_300,
+            "Clothing": ft.colors.PURPLE_300,
+            "Fitness": ft.colors.DEEP_PURPLE_400,
+            # Food & Dining - Warm, appetizing colors
+            "Dining Out": ft.colors.ORANGE_300,
+            "Coffee": ft.colors.BROWN_300,
+            "Snacks": ft.colors.YELLOW_600,
+
+            # Entertainment & Leisure - Vibrant, fun colors
+            "Entertainment": ft.colors.DEEP_ORANGE_ACCENT_400,
+            "Hobbies": ft.colors.INDIGO_300,
+            "Books": ft.colors.BLUE_GREY_400,
+            "Gaming": ft.colors.DEEP_PURPLE_400,
+            # Technology - Cool, modern colors
+            "Digital Services": ft.colors.BLUE_500,
+            "Electronics": ft.colors.CYAN_500,
+            "Software": ft.colors.LIGHT_BLUE_500,
+
+            # Family & Social - Warm, caring colors
+            "Childcare": ft.colors.YELLOW_400,
+            "Education": ft.colors.LIGHT_GREEN_500,
+            "Gifts": ft.colors.PINK_400,
+            "Pet Care": ft.colors.BROWN_200,
+
+            # Special Occasions - Bright, celebratory colors
+            "Travel": ft.colors.TEAL_400,
+            "Events": ft.colors.DEEP_ORANGE_300,
+            "Charity": ft.colors.LIGHT_GREEN_400,
+
+            # Financial - Professional, trustworthy colors
+            "Savings": ft.colors.GREEN_500,
+            "Investments": ft.colors.GREEN_700,
+            "Debt Payment": ft.colors.RED_500,
+
+            # Miscellaneous - Neutral colors
+            "Emergency": ft.colors.RED_600,
+            "Other": ft.colors.GREY_500,
+        }
+        return category_colors
 
     def create_charts_tab(self):
         # Initialize filter indices
@@ -825,33 +1555,16 @@ class BudgetApp:
 
             return expenses_by_category_date, sorted_dates
 
-        def get_category_colors():
-            category_colors = {
-                "Food": ft.colors.RED_400,
-                "Transport": ft.colors.LIGHT_BLUE_400,
-                "Entertainment": ft.colors.PURPLE_200,
-                "Cloths": ft.colors.LIME_100,
-                "Bills": ft.colors.RED_ACCENT_200,
-                "Childcare": ft.colors.YELLOW_300,
-                "Health": ft.colors.GREEN_600,
-                "Digital services": ft.colors.BLUE_500,
-                "Dining Out": ft.colors.ORANGE_200,
-                "Toys": ft.colors.PURPLE_400,
-                "Presents": ft.colors.PURPLE_800,
-                "Other": ft.colors.TEAL_500,
-                "Vacation": ft.colors.GREEN_ACCENT_400,
-                "Books": ft.colors.BLUE_500,
-                "Self Improvement": ft.colors.LIME_200,
-            }
-            return category_colors
 
         def create_pie_sections():
             expense_categories = get_selected_expenses(pie_chart_filter_index)
-            category_colors = get_category_colors()
+            category_colors = self.get_category_colors()
+
+            total_amount = sum(expense_categories.values())
 
             pie_sections = [ft.PieChartSection(
                 value=amount,
-                title=category,
+                title=f"{category}\n{(amount/total_amount)*100:.1f}%",
                 radius=100,
                 color=category_colors.get(category, ft.colors.GREY_500)
             )
@@ -861,7 +1574,7 @@ class BudgetApp:
 
         def create_bars():
             expense_categories = get_selected_expenses(bar_chart_filter_index)
-            category_colors = get_category_colors()
+            category_colors = self.get_category_colors()
 
             if not expense_categories:
                 return []
@@ -885,7 +1598,7 @@ class BudgetApp:
 
         def create_line_chart_data():
             expenses_by_category_date, sorted_dates = get_expenses_by_date_and_category(line_chart_filter_index)
-            category_colors = get_category_colors()
+            category_colors = self.get_category_colors()
 
             if not expenses_by_category_date or not sorted_dates:
                 return []
@@ -1144,23 +1857,28 @@ class BudgetApp:
         self.update_analysis_list()
 
     def get_recurring_period(self, period):
-        nr_of_days = 0
+        months = 0
         if period == 'Monthly':
-            nr_of_days = 30
+            months = 1
         elif period == "Yearly":
-            nr_of_days == 30 * 12
+            months = 12
         else:
-            nr_of_days == int(period.split()[0]) * 30
-        return nr_of_days
+            months = int(period.split()[0])
+        return months
+
 
     def automaticaly_update_expense(self):
-        print(self.recurring_expenses)
+        print("Checking for recurring expenses")
+        print(f'Recurring expenses list is : {self.recurring_expenses}')
         for expense in self.recurring_expenses:
             try:
+                print(f"checking reccuring expenses date")
+                if type(expense['recurring day']) is not str:
+                    expense['recurring day'] = expense['recurring day'].strftime('%Y-%m-%d %H:%M:%S')
                 if expense['recurring day'] <= datetime.now().strftime('%Y-%m-%d %H:%M:%S'):
                     print("Automatically updating expense")
-                    new_date = datetime.fromisoformat(expense['recurring day'].replace('Z', '')) + timedelta(
-                        self.get_recurring_period(expense['is recurring']))
+                    months = self.get_recurring_period(expense['is recurring'])
+                    new_date = expense['recurring day'] + relativedelta(months=months)
                     print(f"Old date is {expense['recurring day']} and New date is {new_date}")
                     expense_data = {
                         'user id': self.user_id,
@@ -1174,7 +1892,7 @@ class BudgetApp:
                         'owe status': expense['owe status'],
                         'percentage': expense['percentage'],
                         'is recurring': expense['is recurring'],
-                        'recurring day': new_date.strftime('%Y-%m-%d %H:%M:%S')
+                        'recurring day': new_date
                     }
 
                     if not self.db:
@@ -1253,6 +1971,117 @@ class BudgetApp:
 
         except Exception as e:
             print(e)
+    def create_expense_item(self, expense):
+        print("entering function create_expense_item")
+        category = expense.get('category', '')
+        category_colors = self.get_category_colors()
+        category_color = category_colors.get(category, ft.colors.BLUE_300)
+
+        category_badge = ft.Container(
+            content=ft.Row([
+                ft.Icon(self.get_category_icon(category)),
+                ft.Text(category, size=12, weight=ft.FontWeight.W_500)
+                ], spacing=8),
+                padding=ft.padding.symmetric(horizontal=12, vertical=6),
+                bgcolor=category_color,
+                border_radius=20,
+            )
+        recurring_badge = None
+        if expense["is recurring"] != 'No':
+            recurring_badge = ft.Container(
+                content=ft.Text(
+                    expense["is recurring"],
+                    size=11,
+                    weight=ft.FontWeight.W_500,
+                    color=ft.colors.WHITE
+                ),
+                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                bgcolor=ft.colors.ORANGE_600,
+                border_radius=12,
+            )
+        shared_badge = None
+        if expense['shared'] != "No":
+            shared_sum = float(expense['amount']) * float(expense['percentage']) * 0.01
+            shared_badge = ft.Container(
+                content=ft.Row([
+                    ft.Text(
+                        f"You owe {str(shared_sum)} {self.currency} to" if expense['owe status']==True else
+                        f"You are owed {str(shared_sum)} {self.currency} by",
+                        size=11,
+                        weight=ft.FontWeight.W_500,
+                        color=ft.colors.RED_400 if expense['owe status']==True else ft.colors.GREEN_400
+                    ),
+                ft.Text(
+                    expense["shared"],
+                    size=11,
+                    weight=ft.FontWeight.W_500,
+                    color=ft.colors.RED_400 if expense['owe status']==True else ft.colors.GREEN_400
+                ),
+                ]),
+                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                bgcolor=ft.colors.PINK_100 if expense['owe status']==True else ft.colors.GREEN_100,
+                border_radius=12,
+            )
+        expense_item = ft.Card(
+            content=ft.Container(
+            content=ft.Column([
+                # Header row
+                ft.Row([
+                    ft.Column([
+                        ft.Row([
+                        ft.Text(
+                            expense["description"],
+                            size=16,
+                            weight=ft.FontWeight.W_600,
+                            color=ft.colors.GREY_900
+                        ),
+                            ft.Row([
+                                ft.IconButton(
+                                    icon=ft.icons.EDIT,
+                                    icon_color=ft.colors.BLUE,
+                                    on_click=lambda e, exp_id=expense.get('id'): self.show_edit_expense_dialog(exp_id)
+                                ),
+                                ft.IconButton(
+                                    icon=ft.icons.DELETE,
+                                    icon_color=ft.colors.RED,
+                                    on_click=lambda e, exp_id=expense.get('id'): self.delete_expense(exp_id)
+                                )
+                            ], )
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        category_badge
+                    ], spacing=4, expand=True),
+                    ft.Text(
+                        f"{expense['amount']:.2f} {self.currency}",
+                        size=18,
+                        weight=ft.FontWeight.W_700,
+                        color=ft.colors.GREY_900
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
+                # Meta row
+                ft.Row([
+                    ft.Text(
+                        expense["date"],
+                        size=12,
+                        color=ft.colors.GREY_600
+                    ),
+                    shared_badge if shared_badge else ft.Container(),
+                    recurring_badge if recurring_badge else ft.Container()
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            ], spacing=12),
+            padding=ft.padding.all(20),
+            margin=ft.margin.only(bottom=16),
+            bgcolor=ft.colors.WHITE,
+            border_radius=16,
+            border=ft.border.all(1, ft.colors.GREY_100),
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=8,
+                color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                offset=ft.Offset(0, 2)
+            ),
+        ) )
+        return expense_item
 
     def update_expenses_list(self, e=None):
         """Update the expenses list display"""
@@ -1260,38 +2089,44 @@ class BudgetApp:
         self.expenses_list.controls.clear()
         filtered_expenses = self.expenses
 
+
         if not self.expenses:
             self.expenses_list.controls.append(
                 ft.Text("No expenses recorded yet.", color=ft.colors.GREY_600)
             )
         else:
-            recurring_filter = self.recurring_checkbox.value
+            recurring_filter = self.occurence_filter.value
+            selected_period = self.time_period_filter.value
             if self.category_filter.value and self.category_filter.value != 'All':
                 filtered_expenses = [exp for exp in self.expenses if exp['category'] == self.category_filter.value]
 
-            if recurring_filter:
+            if recurring_filter == "Periodic":
                 filtered_expenses = [exp for exp in filtered_expenses if exp['is recurring'] != "No"]
 
-            if self.period_filter.selected_index == 0:
+            elif recurring_filter == "Not Periodic":
+                filtered_expenses = [exp for exp in filtered_expenses if exp['is recurring'] == "No"]
+
+            if selected_period == "1M":
                 filtered_expenses = [exp for exp in filtered_expenses if exp['date'] >=
                                      (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")]
-            elif self.period_filter.selected_index == 1:
+            elif selected_period == "2M":
                 filtered_expenses = [exp for exp in filtered_expenses if exp['date'] >=
                                      (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d %H:%M:%S")]
 
-            elif self.period_filter.selected_index == 2:
+            elif selected_period == "3M":
                 filtered_expenses = [exp for exp in filtered_expenses if exp['date'] >=
                                      (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S")]
 
-            elif self.period_filter.selected_index == 3:
+            elif selected_period == "6M" == 3:
                 filtered_expenses = [exp for exp in filtered_expenses if exp['date'] >=
                                      (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d %H:%M:%S")]
 
-            elif self.period_filter.selected_index == 4:
+            elif selected_period == "12M":
                 filtered_expenses = [exp for exp in filtered_expenses if exp['date'] >=
                                      (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d %H:%M:%S")]
 
             for expense in (filtered_expenses):
+                '''
                 expense_card = ft.Card(
                     content=ft.Container(
                         content=ft.Row([
@@ -1313,11 +2148,11 @@ class BudgetApp:
                             ], expand=True, spacing=1),
                             ft.Column([
                                 ft.Row([
-                                    ft.Text("Is Recurring: "),
+                                    ft.Text("Occurrence: "),
                                     ft.Text(expense.get('is recurring', ''), size=12, color=ft.colors.GREY_500),
                                 ]),
                                 ft.Row([
-                                    ft.Text("Recurring day: "),
+                                    ft.Text("Next Occurrence day: "),
                                     ft.Text(expense.get('recurring day', ''), size=12, color=ft.colors.GREY_500)
                                 ]),
 
@@ -1338,6 +2173,8 @@ class BudgetApp:
                         padding=15
                     )
                 )
+                '''
+                expense_card = self.create_expense_item(expense)
                 self.expenses_list.controls.append(expense_card)
 
         self.page.update()
@@ -1421,23 +2258,102 @@ class BudgetApp:
 
         if not self.analysis:
             print("No entries in analysis list")
-            self.analysis_list.controls.append(
-                ft.Text("No analysis recorded yet.", color=ft.colors.GREY_600)
-            )
-        else:
-            print(f"Ai analysis list is {self.analysis}")
-            for entry in self.analysis:
-                print(f"Entry is {entry}")
-                analysis_card = ft.Card(
-                    content=ft.Container(
-                        content=ft.Column([
-                            ft.Text(f"{entry.get('analysis', '')}", selectable=True),  # Changed to match save field
-                            ft.Text(f"Date: {entry.get('date', '')}")
-                        ])
+            # Empty state card
+            empty_state = ft.Container(
+                content=ft.Column([
+                    ft.Icon(
+                        ft.icons.INSIGHTS,
+                        size=64,
+                        color=ft.colors.GREY_300
+                    ),
+                    ft.Text(
+                        "No Analysis Yet",
+                        size=20,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.colors.GREY_500,
+                        text_align=ft.TextAlign.CENTER
+                    ),
+                    ft.Text(
+                        "Generate your first AI analysis to get personalized insights about your spending habits.",
+                        size=14,
+                        color=ft.colors.GREY_400,
+                        text_align=ft.TextAlign.CENTER
                     )
+                ],
+                    spacing=12,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=ft.padding.all(40),
+                bgcolor=ft.colors.GREY_50,
+                border_radius=16,
+                border=ft.border.all(1, ft.colors.GREY_200),
+                alignment=ft.alignment.center
+            )
+            self.analysis_list.controls.append(empty_state)
+        else:
+            print(f"AI analysis list is {self.analysis}")
+            for i, entry in enumerate(self.analysis):
+                print(f"Entry is {entry}")
+
+                # Create gradient colors for different analysis cards
+                card_colors = [
+                    (ft.colors.PURPLE_50, ft.colors.PURPLE_400),
+                    (ft.colors.BLUE_50, ft.colors.BLUE_400),
+                    (ft.colors.GREEN_50, ft.colors.GREEN_400),
+                    (ft.colors.ORANGE_50, ft.colors.ORANGE_400),
+                    (ft.colors.PINK_50, ft.colors.PINK_400)
+                ]
+                bg_color, accent_color = (ft.colors.GREEN_50, ft.colors.GREEN_400)
+
+                # Parse analysis content for better formatting
+                analysis_text = entry.get('analysis', '')
+                date_text = entry.get('date', '')
+
+                analysis_card = ft.Container(
+                    content=ft.Column([
+                        # Card header
+                        ft.Row([
+                            ft.Icon(
+                                ft.icons.AUTO_AWESOME,
+                                color=accent_color,
+                                size=20
+                            ),
+                            ft.Text(
+                                f"Analysis Report",
+                                size=16,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.colors.GREY_800,
+                                expand=True
+                            ),
+                            ft.Text(
+                                date_text,
+                                size=12,
+                                color=ft.colors.GREY_500
+                            ) if date_text else ft.Container()
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
+                        ft.Divider(color=ft.colors.GREY_200, height=1),
+
+                        # Analysis content
+                        ft.Container(
+                            content=ft.Text(
+                                analysis_text,
+                                size=14,
+                                color=ft.colors.GREY_700,
+                                selectable=True,
+                                font_family='Arial'
+                            ),
+                            padding=ft.padding.only(top=8)
+                        )
+                    ], spacing=12),
+                    padding=ft.padding.all(20),
+                    bgcolor=bg_color,
+                    border_radius=16,
+                    border=ft.border.all(1, ft.colors.GREY_200),
+                    margin=ft.margin.only(bottom=12)
                 )
                 self.analysis_list.controls.append(analysis_card)
 
+        self.update_analysis_button_state()
         self.page.update()
 
     def get_ai_analysis(self, e=None):
@@ -1541,24 +2457,34 @@ class BudgetApp:
         self.page.update()
 
     def show_expense_category(self):
-        drop_down_options = [
-            ft.dropdown.Option("Food"),
-            ft.dropdown.Option("Transport"),
-            ft.dropdown.Option("Entertainment"),
-            ft.dropdown.Option("Cloths"),
-            ft.dropdown.Option("Bills"),
-            ft.dropdown.Option("Childcare"),
-            ft.dropdown.Option("Health"),
-            ft.dropdown.Option("Digital services"),
-            ft.dropdown.Option("Dining Out"),
-            ft.dropdown.Option("Toys"),
-            ft.dropdown.Option("Presents"),
-            ft.dropdown.Option("Other"),
-            ft.dropdown.Option("Vacation"),
-            ft.dropdown.Option("Books"),
-            ft.dropdown.Option("Self Improvement"),
-        ]
-        return drop_down_options
+        category_groups = {
+            "Essential Living": ["Groceries", "Housing", "Utilities", "Transportation", "Insurance", "Healthcare"],
+            "Personal Care": ["Personal Care", "Clothing", "Fitness"],
+            "Food & Dining": ["Dining Out", "Coffee", "Snacks"],
+            "Entertainment & Leisure": ["Entertainment", "Hobbies", "Books", "Gaming"],
+            "Technology": ["Digital Services", "Electronics", "Software"],
+            "Family & Social": ["Childcare", "Education", "Gifts", "Pet Care"],
+            "Special Occasions": ["Travel", "Events", "Charity"],
+            "Financial": ["Savings", "Investments", "Debt Payment"],
+            "Miscellaneous": ["Emergency", "Other"]
+        }
+
+        dropdown_options = []
+
+        for group_name, categories in category_groups.items():
+            # Add group header
+            dropdown_options.append(ft.dropdown.Option(
+                text=f"--- {group_name} ---",
+                disabled=True
+            ))
+
+            # Add categories in this group
+            for category in categories:
+                dropdown_options.append(ft.dropdown.Option(
+                    text=category,
+                    key=category
+                ))
+        return dropdown_options
 
     def get_friend_data(self):
         friends_list = FriendsManager(self.user_id).get_friends_list()
@@ -1570,70 +2496,161 @@ class BudgetApp:
     def show_add_expense_dialog(self, e):
         """Show dialog to add new expense"""
 
-        amount_field = ft.TextField(label="Amount", keyboard_type=ft.KeyboardType.NUMBER, adaptive=True, width=100)
-        category_field = ft.Dropdown(
-            label="Category",
-            width=100,
-            options=self.show_expense_category()
+        amount_input = ft.TextField(
+            label="Amount",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            adaptive=True,
+            border_radius=12,
+            prefix_icon=ft.icons.MONEY,
+            bgcolor=ft.colors.BLUE_50,
+            border_color=ft.colors.BLUE_200,
+            focused_border_color=ft.colors.BLUE_400,
+            suffix_text=self.currency,
         )
-        description_field = ft.TextField(label="Description", multiline=True, width=300)
 
-        recurring_period = ft.Dropdown(
-            label="Is Recurring",
-            options=[ft.dropdown.Option("No"),
-                     ft.dropdown.Option("Monthly"),
-                     ft.dropdown.Option("Yearly"),
-                     ft.dropdown.Option("2 Months"),
-                     ft.dropdown.Option("3 Months"),
-                     ft.dropdown.Option("4 Months"),
-                     ft.dropdown.Option("5 Months"),
-                     ft.dropdown.Option("6 Months"),
-                     ft.dropdown.Option("7 Months"),
-                     ft.dropdown.Option("8 Months"),
-                     ft.dropdown.Option("9 Months"),
-                     ft.dropdown.Option("10 Months"),
-                     ft.dropdown.Option("11 Months")],
-            value="No",
-            width=100,
+        amount_field = ft.Container(
+            content=amount_input,
+            margin=ft.margin.only(bottom=15)
+        )
+
+        category_input = ft.Dropdown(
+                label="Category",
+                options=self.show_expense_category(),
+                border_radius=12,
+                bgcolor=ft.colors.ORANGE_50,
+                border_color=ft.colors.ORANGE_200,
+                focused_border_color=ft.colors.ORANGE_400,
+            )
+        category_field = ft.Container(
+            content=category_input,
+            margin=ft.margin.only(bottom=15)
+        )
+
+        description_input = ft.TextField(
+                label="Description",
+                multiline=True,
+                min_lines=2,
+                max_lines=3,
+                border_radius=12,
+                bgcolor=ft.colors.GREEN_50,
+                border_color=ft.colors.GREEN_200,
+                focused_border_color=ft.colors.GREEN_400,
+            )
+
+        description_field = ft.Container(
+            content=description_input,
+            margin=ft.margin.only(bottom=15)
+        )
+
+        recurring_period_input = ft.Dropdown(
+                    options=[ft.dropdown.Option("No"),
+                             ft.dropdown.Option("Monthly"),
+                             ft.dropdown.Option("Yearly"),
+                             ft.dropdown.Option("2 Months"),
+                             ft.dropdown.Option("3 Months"),
+                             ft.dropdown.Option("4 Months"),
+                             ft.dropdown.Option("5 Months"),
+                             ft.dropdown.Option("6 Months"),
+                             ft.dropdown.Option("7 Months"),
+                             ft.dropdown.Option("8 Months"),
+                             ft.dropdown.Option("9 Months"),
+                             ft.dropdown.Option("10 Months"),
+                             ft.dropdown.Option("11 Months")],
+                    value="No",
+                    border_radius=12,
+                    bgcolor=ft.colors.PURPLE_50,
+                    border_color=ft.colors.PURPLE_200,
+                    focused_border_color=ft.colors.PURPLE_400,
+                )
+
+        recurring_period = ft.Container(
+            content=ft.Column([
+                ft.Text("Recurring Period", weight=ft.FontWeight.W_500, size=14),
+                recurring_period_input
+            ], spacing=8),
+            bgcolor=ft.colors.WHITE,
+            border_radius=12,
+            padding=15,
+            margin=ft.margin.only(bottom=15),
+            border=ft.border.all(1, ft.colors.GREY_200)
         )
         print(f"getting friends list with id_token")
         friends = self.get_friend_data()
-        share_with_options = [ft.dropdown.Option(friend) for friend in friends.keys()]
+        share_with_options = [ft.dropdown.Option("No")] + [ft.dropdown.Option(friend) for friend in friends.keys()]
 
-        share_with = ft.Dropdown(
-            label="Shared",
-            options=share_with_options,
-            value='No'
+        share_with_input = ft.Dropdown(
+                    options=share_with_options,
+                    value='No',
+                    border_radius=12,
+                    bgcolor=ft.colors.CYAN_50,
+                    border_color=ft.colors.CYAN_200,
+                    focused_border_color=ft.colors.CYAN_400,
+                )
+
+        share_with = ft.Container(
+            content=ft.Column([
+                ft.Text("Share With", weight=ft.FontWeight.W_500, size=14),
+                share_with_input
+            ], spacing=8),
+            bgcolor=ft.colors.WHITE,
+            border_radius=12,
+            padding=15,
+            margin=ft.margin.only(bottom=15),
+            border=ft.border.all(1, ft.colors.GREY_200)
         )
-        percentage = ft.RangeSlider(
-                min=0,
-                max=100,
-                start_value=0,
-                end_value=50,
-                divisions=10,  # Creates tick marks
-                label="{value}%",
-            # These properties help with visibility
-            )
-        percentage_display = ft.Column([
-            ft.Text("Configure % of owed expense"),
-            percentage
-        ])
 
-        impulse_index = ft.RangeSlider(
+        percentage = ft.RangeSlider(
             min=0,
             max=100,
             start_value=0,
-            end_value=0,
-            divisions=10,  # Creates tick marks
+            end_value=50,
+            divisions=10,
             label="{value}%",
-            # These properties help with visibility
+            active_color=ft.colors.BLUE_400,
+            inactive_color=ft.colors.BLUE_100,
+            #thumb_color=ft.colors.BLUE_600,
         )
-        impulse_index_display = ft.Column([
-            ft.Text("Configure Impuls Index: 0 - Low, 100 - High"),
-            impulse_index
-        ])
 
-        owner = ft.Checkbox(label="I owe the expense", value=False)
+        percentage_display = ft.Container(
+            content=ft.Column([
+                ft.Text("Configure % of owed expense", weight=ft.FontWeight.W_500, size=14),
+                percentage
+            ], spacing=10),
+            bgcolor=ft.colors.WHITE,
+            border_radius=12,
+            padding=15,
+            margin=ft.margin.only(bottom=15),
+            border=ft.border.all(1, ft.colors.GREY_200)
+        )
+
+        review_item_input = ft.Checkbox(
+                label="Review this expense later",
+                value=False,
+                check_color=ft.colors.WHITE,
+                active_color=ft.colors.GREEN_400,
+            )
+        review_item = ft.Container(
+            content=review_item_input,
+            bgcolor=ft.colors.GREEN_50,
+            border_radius=8,
+            padding=10,
+            margin=ft.margin.only(bottom=10)
+        )
+
+        owner_input = ft.Checkbox(
+                label="I owe the expense",
+                value=False,
+                check_color=ft.colors.WHITE,
+                active_color=ft.colors.ORANGE_400,
+            )
+
+        owner = ft.Container(
+            content=owner_input,
+            bgcolor=ft.colors.ORANGE_50,
+            border_radius=8,
+            padding=10,
+            margin=ft.margin.only(bottom=15)
+        )
 
         self.recurring_day = datetime.now().strftime('%Y-%m-%d')
         self.recurring_date_picker = ft.DatePicker(
@@ -1643,21 +2660,29 @@ class BudgetApp:
             current_date=datetime.now()
         )
 
-        self.recurring_date_button = ft.TextButton(
-            text=f"Recurring Date: {self.recurring_day}",
-            icon=ft.icons.CALENDAR_MONTH,
-            on_click=self.open_recurring_date_picker,
-            width=100
+        self.recurring_date_button = ft.Container(
+            content=ft.ElevatedButton(
+                text=f"New Occurrence: {self.recurring_day}",
+                icon=ft.icons.CALENDAR_MONTH,
+                on_click=self.open_recurring_date_picker,
+                bgcolor=ft.colors.INDIGO_400,
+                color=ft.colors.WHITE,
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=12),
+                    padding=ft.padding.all(15)
+                )
+            ),
+            margin=ft.margin.only(bottom=20)
         )
 
         def save_expense(e):
             try:
-                amount = float(amount_field.value or 0)
-                category = category_field.value or ""
-                description = description_field.value or ""
-                shared = share_with.value
-                owe_status = owner.value
-                is_recurring = recurring_period.value
+                amount = float(amount_input.value or 0)
+                category = category_input.value or ""
+                description = description_input.value or ""
+                shared = share_with_input.value
+                owe_status = owner_input.value
+                is_recurring = recurring_period_input.value
                 if is_recurring not in ['No', 'All']:
                     recurring_day = self.recurring_day
                 else:
@@ -1674,7 +2699,7 @@ class BudgetApp:
                     'amount': amount,
                     'category': category,
                     'description': description,
-                    'impulse index': impulse_index.end_value,
+                    'review': review_item_input.value,
                     'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'timestamp': datetime.now(),
                     'shared': shared,
@@ -1701,7 +2726,7 @@ class BudgetApp:
                             'amount': amount,
                             'category': category,
                             'description': description,
-                            'impulse index': str(0),
+                            'review item': False,
                             'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'timestamp': datetime.now(),
                             'shared': self.display_name,
@@ -1719,9 +2744,13 @@ class BudgetApp:
                     expense_data['id'] = f"local_{len(self.expenses)}"
                     print("⚠️ Firebase not available, expense saved locally only")
 
-                self.expenses.append(expense_data)
+                self.expenses.insert(0,expense_data)
                 self.update_expenses_list()
                 self.update_budget_summary()
+                self.create_budget_progress_card()
+                self.create_quick_insights_row()
+                self.create_highest_expenses_card()
+                self.create_recent_transactions_card()
                 self.pie_chart.sections = self.create_pie_sections()
                 self.expense_form_dialog.open = False
                 self.page.update()
@@ -1735,30 +2764,62 @@ class BudgetApp:
 
         self.expense_form_dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Add New Expense"),
+            title=ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.icons.ADD_CIRCLE_OUTLINE, color=ft.colors.BLUE_600, size=24),
+                ft.Text("Add New Expense", weight=ft.FontWeight.BOLD, size=20, color=ft.colors.BLUE_900)
+            ], spacing=10),
+                padding=ft.padding.only(bottom=10)
+            ),
             content=ft.Container(
-                content=ft.ListView(
-                    controls=[
-                        amount_field,
-                        category_field,
-                        description_field,
-                        impulse_index_display,
-                        share_with,
-                        percentage_display,
-                        owner,
-                        recurring_period,
-                        self.recurring_date_button
-                    ],
-                    spacing=10,
-                    padding=10
-                ),
-                height=400,
-                width=300,
+                content=ft.Column([
+                    amount_field,
+                    category_field,
+                    description_field,
+                    recurring_period,
+                    share_with,
+                    percentage_display,
+                    review_item,
+                    owner,
+                    self.recurring_date_button
+                ], spacing=0, scroll=ft.ScrollMode.AUTO),
+                height=600,
+                width=400,
+                padding=20,
+                bgcolor=ft.colors.GREY_50,
+                border_radius=15
             ),
             actions=[
-                ft.TextButton("Cancel", on_click=lambda e: self.close_expense_dialog()),
-                ft.ElevatedButton("Save", on_click=save_expense)
+                ft.Container(
+                    content=ft.Row([
+                        ft.TextButton(
+                            "Cancel",
+                            on_click=lambda e: self.close_expense_dialog(),
+                            style=ft.ButtonStyle(
+                                color=ft.colors.GREY_600,
+                                bgcolor=ft.colors.GREY_100,
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                                padding=ft.padding.symmetric(horizontal=20, vertical=10)
+                            )
+                        ),
+                        ft.ElevatedButton(
+                            "Save Expense",
+                            on_click=save_expense,
+                            icon=ft.icons.SAVE,
+                            bgcolor=ft.colors.GREEN_500,
+                            color=ft.colors.WHITE,
+                            style=ft.ButtonStyle(
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                                padding=ft.padding.symmetric(horizontal=20, vertical=12)
+                            )
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    padding=ft.padding.only(top=10)
+                )
             ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.colors.WHITE,
+            shape=ft.RoundedRectangleBorder(radius=20),
             adaptive=True
         )
 
@@ -2024,41 +3085,262 @@ class BudgetApp:
 
         self.editing_expense_id = expense_id
 
-        amount_field = ft.TextField(label="Amount", value=str(expense.get('amount', 0)),
-                                    keyboard_type=ft.KeyboardType.NUMBER, width=200)
-        category_field = ft.TextField(label="Category", value=expense.get('category', ''), width=200)
-        description_field = ft.TextField(label="Description", value=expense.get('description', ''),
-                                         multiline=True, width=300)
+        amount_input = ft.TextField(
+            label="Amount",
+            value=str(expense.get('amount', 0)),
+            keyboard_type=ft.KeyboardType.NUMBER,
+            adaptive=True,
+            border_radius=12,
+            prefix_icon=ft.icons.MONEY,
+            bgcolor=ft.colors.BLUE_50,
+            border_color=ft.colors.BLUE_200,
+            focused_border_color=ft.colors.BLUE_400,
+            suffix_text=self.currency,
+        )
+
+        amount_field = ft.Container(
+            content=amount_input,
+            margin=ft.margin.only(bottom=15)
+        )
+
+        category_input = ft.Dropdown(
+            label="Category",
+            value=expense.get('category', ''),
+            options=self.show_expense_category(),
+            border_radius=12,
+            bgcolor=ft.colors.ORANGE_50,
+            border_color=ft.colors.ORANGE_200,
+            focused_border_color=ft.colors.ORANGE_400,
+        )
+
+        category_field = ft.Container(
+            content=category_input,
+            margin=ft.margin.only(bottom=15)
+        )
+
+        description_input = ft.TextField(
+            label="Description",
+            value=expense.get('description', ''),
+            multiline=True,
+            min_lines=2,
+            max_lines=3,
+            border_radius=12,
+            bgcolor=ft.colors.GREEN_50,
+            border_color=ft.colors.GREEN_200,
+            focused_border_color=ft.colors.GREEN_400,
+        )
+        description_field = ft.Container(
+            content=description_input,
+            margin=ft.margin.only(bottom=15)
+        )
+
+        recurring_period_input = ft.Dropdown(
+            options=[ft.dropdown.Option("No"),
+                     ft.dropdown.Option("Monthly"),
+                     ft.dropdown.Option("Yearly"),
+                     ft.dropdown.Option("2 Months"),
+                     ft.dropdown.Option("3 Months"),
+                     ft.dropdown.Option("4 Months"),
+                     ft.dropdown.Option("5 Months"),
+                     ft.dropdown.Option("6 Months"),
+                     ft.dropdown.Option("7 Months"),
+                     ft.dropdown.Option("8 Months"),
+                     ft.dropdown.Option("9 Months"),
+                     ft.dropdown.Option("10 Months"),
+                     ft.dropdown.Option("11 Months")],
+            value=expense.get('is recurring', ''),
+            border_radius=12,
+            bgcolor=ft.colors.PURPLE_50,
+            border_color=ft.colors.PURPLE_200,
+            focused_border_color=ft.colors.PURPLE_400,
+        )
+
+        recurring_period = ft.Container(
+            content=ft.Column([
+                ft.Text("Recurring Period", weight=ft.FontWeight.W_500, size=14),
+                recurring_period_input
+            ], spacing=8),
+            bgcolor=ft.colors.WHITE,
+            border_radius=12,
+            padding=15,
+            margin=ft.margin.only(bottom=15),
+            border=ft.border.all(1, ft.colors.GREY_200)
+        )
+        friends = self.get_friend_data()
+        share_with_options = [ft.dropdown.Option("No")] + [ft.dropdown.Option(friend) for friend in friends.keys()]
+
+        share_with_input = ft.Dropdown(
+            options=share_with_options,
+            value=expense.get("shared"," "),
+            border_radius=12,
+            bgcolor=ft.colors.CYAN_50,
+            border_color=ft.colors.CYAN_200,
+            focused_border_color=ft.colors.CYAN_400,
+        )
+
+        share_with = ft.Container(
+            content=ft.Column([
+                ft.Text("Share With", weight=ft.FontWeight.W_500, size=14),
+                share_with_input
+            ], spacing=8),
+            bgcolor=ft.colors.WHITE,
+            border_radius=12,
+            padding=15,
+            margin=ft.margin.only(bottom=15),
+            border=ft.border.all(1, ft.colors.GREY_200)
+        )
+
+        percentage = ft.RangeSlider(
+            min=0,
+            max=100,
+            start_value=0,
+            end_value=50,
+            divisions=10,
+            label="{value}%",
+            active_color=ft.colors.BLUE_400,
+            inactive_color=ft.colors.BLUE_100,
+            # thumb_color=ft.colors.BLUE_600,
+        )
+
+        percentage_display = ft.Container(
+            content=ft.Column([
+                ft.Text("Configure % of owed expense", weight=ft.FontWeight.W_500, size=14),
+                percentage
+            ], spacing=10),
+            bgcolor=ft.colors.WHITE,
+            border_radius=12,
+            padding=15,
+            margin=ft.margin.only(bottom=15),
+            border=ft.border.all(1, ft.colors.GREY_200)
+        )
+
+        review_item_input = ft.Checkbox(
+            label="Review this expense later",
+            value=expense.get('review', " "),
+            check_color=ft.colors.WHITE,
+            active_color=ft.colors.GREEN_400,
+        )
+        review_item = ft.Container(
+            content=review_item_input,
+            bgcolor=ft.colors.GREEN_50,
+            border_radius=8,
+            padding=10,
+            margin=ft.margin.only(bottom=10)
+        )
+
+        owner_input = ft.Checkbox(
+            label="I owe the expense",
+            value=expense.get("owe status", " "),
+            check_color=ft.colors.WHITE,
+            active_color=ft.colors.ORANGE_400,
+        )
+
+        owner = ft.Container(
+            content=owner_input,
+            bgcolor=ft.colors.ORANGE_50,
+            border_radius=8,
+            padding=10,
+            margin=ft.margin.only(bottom=15)
+        )
+
+        self.recurring_day = expense.get('recurring day', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self.recurring_date_picker = ft.DatePicker(
+            on_change=self.on_recurring_date_change,
+            first_date=datetime(2025, 1, 1),
+            last_date=datetime(2030, 12, 31),
+            current_date=datetime.now()
+        )
+
+        self.recurring_date_button = ft.Container(
+            content=ft.ElevatedButton(
+                text=f"New Occurrence: {self.recurring_day}",
+                icon=ft.icons.CALENDAR_MONTH,
+                on_click=self.open_recurring_date_picker,
+                bgcolor=ft.colors.INDIGO_400,
+                color=ft.colors.WHITE,
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=12),
+                    padding=ft.padding.all(15)
+                )
+            ),
+            margin=ft.margin.only(bottom=20)
+        )
 
         def update_expense(e):
             try:
-                amount = float(amount_field.value or 0)
-                category = category_field.value or ""
-                description = description_field.value or ""
+                amount = float(amount_input.value or 0)
+                category = category_input.value or ""
+                description = description_input.value or ""
+                shared = share_with_input.value
+                owe_status = owner_input.value
+                is_recurring = recurring_period_input.value
+                if is_recurring not in ['No', 'All']:
+                    recurring_day = self.recurring_day
+                else:
+                    recurring_day = None
+
+                friend_data = self.get_friend_data()
+
+                if amount <= 0:
+                    self.show_snackbar("Please enter a valid amount")
+                    return
+
+                expense_data = {
+                    'user id': self.user_id,
+                    'amount': amount,
+                    'category': category,
+                    'description': description,
+                    'review': review_item_input.value,
+                    'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'timestamp': datetime.now(),
+                    'shared': shared,
+                    'owe status': owe_status,
+                    'percentage': percentage.end_value,
+                    'is recurring': is_recurring,
+                    'recurring day': recurring_day
+                }
 
                 if amount <= 0:
                     self.show_snackbar("Please enter a valid amount")
                     return
 
                 # Update in Firebase
-                self.db.collection('expenses').document(expense_id).update({
-                    'amount': amount,
-                    'category': category,
-                    'description': description,
-                })
+                if not self.db:
+                    self.db = firestore.client()
+
+                self.db.collection('users').document(self.user_id).collection('expenses').document(expense_id)\
+                    .update(expense_data)
+
+                if shared != "No":
+                    friend_expense_data = {
+                        'user id': self.user_id,
+                        'amount': amount,
+                        'category': category,
+                        'description': description,
+                        'review item': False,
+                        'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'timestamp': datetime.now(),
+                        'shared': self.display_name,
+                        'owe status': not owe_status,
+                        'percentage': str(100 - float(percentage.end_value)),
+                        'is recurring': is_recurring,
+                        'recurring day': recurring_day
+                    }
+                    self.db.collection('users').document(friend_data[shared]).collection('expenses').document(expense_id)\
+                        .update(friend_expense_data)
 
                 # Update local data
                 for i, exp in enumerate(self.expenses):
                     if exp.get('id') == expense_id:
-                        self.expenses[i].update({
-                            'amount': amount,
-                            'category': category,
-                            'description': description
-                        })
+                        self.expenses[i].update(expense_data)
                         break
 
                 self.update_expenses_list()
                 self.update_budget_summary()
+                self.create_budget_progress_card()
+                self.create_quick_insights_row()
+                self.create_highest_expenses_card()
+                self.create_recent_transactions_card()
                 self.edit_expense_dialog.open = False
                 self.page.update()
                 self.show_snackbar("Expense updated successfully!")
@@ -2070,17 +3352,65 @@ class BudgetApp:
 
         self.edit_expense_dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Edit Expense"),
-            content=ft.Column([
-                amount_field,
-                category_field,
-                description_field
-            ], height=200),
+            title=ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.icons.EDIT_SHARP, color=ft.colors.BLUE_600, size=24),
+                ft.Text("Edit Expense", weight=ft.FontWeight.BOLD, size=20, color=ft.colors.BLUE_900)
+            ], spacing=10),
+                padding=ft.padding.only(bottom=10)
+            ),
+            content=ft.Container(
+                content=ft.Column([
+                    amount_field,
+                    category_field,
+                    description_field,
+                    recurring_period,
+                    share_with,
+                    percentage_display,
+                    review_item,
+                    owner,
+                    self.recurring_date_button
+                ], spacing=0, scroll=ft.ScrollMode.AUTO),
+                height=600,
+                width=400,
+                padding=20,
+                bgcolor=ft.colors.GREY_50,
+                border_radius=15
+            ),
             actions=[
-                ft.TextButton("Cancel", on_click=lambda e: self.close_edit_dialog()),
-                ft.ElevatedButton("Update", on_click=update_expense)
-            ]
+                ft.Container(
+                    content=ft.Row([
+                        ft.TextButton(
+                            "Cancel",
+                            on_click=lambda e: self.close_edit_dialog(),
+                            style=ft.ButtonStyle(
+                                color=ft.colors.GREY_600,
+                                bgcolor=ft.colors.GREY_100,
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                                padding=ft.padding.symmetric(horizontal=20, vertical=10)
+                            )
+                        ),
+                        ft.ElevatedButton(
+                            "Update Expense",
+                            on_click=update_expense,
+                            icon=ft.icons.SAVE,
+                            bgcolor=ft.colors.GREEN_500,
+                            color=ft.colors.WHITE,
+                            style=ft.ButtonStyle(
+                                shape=ft.RoundedRectangleBorder(radius=8),
+                                padding=ft.padding.symmetric(horizontal=20, vertical=12)
+                            )
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    padding=ft.padding.only(top=10)
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.colors.WHITE,
+            shape=ft.RoundedRectangleBorder(radius=20),
+            adaptive=True
         )
+        self.page.overlay.append(self.recurring_date_picker)
 
         self.page.dialog = self.edit_expense_dialog
         self.edit_expense_dialog.open = True
@@ -2473,7 +3803,7 @@ class BudgetApp:
         expense_data = {
             'user id': self.user_id,
             'amount': amount,
-            'category': "Pay back",
+            'category': "Debt Payment",
             'description': "Settling payment",
             'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'timestamp': datetime.now(),
@@ -2544,6 +3874,18 @@ class BudgetApp:
 
         return ft.Column(expense_items, spacing=5)
 
+    def get_total_expenses(self):
+        print("calculating total expenses for budget progress card")
+        if self.end_date.strftime("%Y-%m-%d") < datetime.now().strftime("%Y-%m-%d"):
+            self.start_date = self.end_date
+            self.end_date = datetime.now()
+        start_date = self.start_date.strftime("%Y-%m-%d")
+        total_expenses = sum(expense.get('amount', 0) for expense in self.expenses if
+                             (expense['shared'] == 'No' or expense['owe status']
+                              is not True and expense['user id'] == self.user_id)
+                             and (start_date <= expense['date']))
+        return total_expenses
+
     def update_budget_summary(self):
         """Update the budget summary display"""
         print("Creating budget summary for overview")
@@ -2554,47 +3896,93 @@ class BudgetApp:
         start_date = self.start_date.strftime("%Y-%m-%d")
         end_date = self.end_date.strftime("%Y-%m-%d")
         print(f"Print expenses: {self.expenses[0]}")
-        total_expenses = sum(expense.get('amount', 0) for expense in self.expenses if
-                             (expense['shared'] == 'No' or expense['owe status']
-                              is not True and expense['user id'] == self.user_id)
-                             and (start_date <= expense['date']))
+        total_expenses = self.get_total_expenses()
         remaining_budget = self.budget_amount - total_expenses
         percentage_used = (total_expenses / self.budget_amount * 100) if self.budget_amount > 0 else 0
 
         print(f"Budget date: {self.end_date}, type : {type(self.end_date)}")
 
-        # Determine color based on budget usage
-        if percentage_used >= 90:
-            remaining_color = ft.colors.RED
-        elif percentage_used >= 70:
-            remaining_color = ft.colors.ORANGE
-        else:
-            remaining_color = ft.colors.GREEN
+        self.budget_summary.content = ft.Row([
+            # Budget card with improved styling
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.icons.ACCOUNT_BALANCE_WALLET,
+                                size=20, color=ft.colors.BLUE_600),
+                        ft.Text("Budget", size=13, color=ft.colors.GREY_700,
+                                weight=ft.FontWeight.W_500),
+                    ], spacing=8),
+                    ft.Container(height=8),
+                    ft.Text(f"{self.budget_amount:.2f} {self.currency}",
+                            size=20, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_700),
+                ], spacing=0, alignment=ft.MainAxisAlignment.START),
+                bgcolor=ft.colors.BLUE_50,
+                border_radius=16,
+                padding=20,
+                expand=1,
+                # Add subtle shadow for depth
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=8,
+                    color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                    offset=ft.Offset(0, 2)
+                ),
+                border=ft.border.all(1, ft.colors.BLUE_200)
+            ),
 
-        self.budget_summary.content = ft.Column([
-            ft.Text("Budget Summary", size=20, weight=ft.FontWeight.BOLD),
-            ft.Divider(),
-            ft.Row([
-                ft.Text("Budget Amount:", weight=ft.FontWeight.BOLD),
-                ft.Text(f"{self.budget_amount:.2f} {self.currency}"),
-                ft.Text("For period: ", weight=ft.FontWeight.BOLD),
-                ft.Text(f"{start_date} - {end_date}")
-            ]),
-            ft.Row([
-                ft.Text("Total Expenses:", weight=ft.FontWeight.BOLD),
-                ft.Text(f"{total_expenses:.2f} {self.currency}")
-            ]),
-            ft.Row([
-                ft.Text("Remaining:", weight=ft.FontWeight.BOLD),
-                ft.Text(f"{remaining_budget:.2f} {self.currency}", color=remaining_color)
-            ]),
-            ft.Row([
-                ft.Text("Budget Used:", weight=ft.FontWeight.BOLD),
-                ft.Text(f"{percentage_used:.1f}%", color=remaining_color)
-            ]),
-            self.update_shared_expenses(),
-            ft.ProgressBar(value=percentage_used / 100, color=remaining_color, height=10),
-        ])
+            # Spent card with improved visual treatment
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.icons.TRENDING_UP,
+                                size=20, color=ft.colors.RED_600),
+                        ft.Text("Spent", size=13, color=ft.colors.GREY_700,
+                                weight=ft.FontWeight.W_500),
+                    ], spacing=8),
+                    ft.Container(height=8),
+                    ft.Text(f"{total_expenses:.2f} Lei",
+                            size=20, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700),
+                ], spacing=0, alignment=ft.MainAxisAlignment.START),
+                bgcolor=ft.colors.RED_50,
+                border_radius=16,
+                padding=20,
+                expand=1,
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=8,
+                    color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                    offset=ft.Offset(0, 2)
+                ),
+                border=ft.border.all(1, ft.colors.RED_200)
+            ),
+
+            # Remaining card with enhanced styling
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.icons.SAVINGS,
+                                size=20, color=ft.colors.GREEN_600),
+                        ft.Text("Remaining", size=13, color=ft.colors.GREY_700,
+                                weight=ft.FontWeight.W_500),
+                    ], spacing=8),
+                    ft.Container(height=8),
+                    ft.Text(f"{remaining_budget:.2f} {self.currency}",
+                            size=20, weight=ft.FontWeight.BOLD, color=ft.colors.GREEN_700),
+                ], spacing=0, alignment=ft.MainAxisAlignment.START),
+                bgcolor=ft.colors.GREEN_50,
+                border_radius=16,
+                padding=20,
+                expand=1,
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=8,
+                    color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                    offset=ft.Offset(0, 2)
+                ),
+                border=ft.border.all(1, ft.colors.GREEN_200)
+            ),
+        ], spacing=15)
+
 
         if self.page:
             self.page.update()
@@ -2738,25 +4126,46 @@ class BudgetApp:
 
     def get_category_icon(self, category):
         icons_map = {
-            "Food": ft.icons.RESTAURANT,
-            "Transport": ft.icons.BUS_ALERT,
-            "Entertainment": ft.icons.MOVIE,
-            "Shopping": ft.icons.SHOPPING_BAG,
-            "Bills": ft.icons.RECEIPT,
-            "Coffe": ft.icons.BLENDER,
-            "Cloths": ft.icons.GIRL_OUTLINED,
-            "Childcare": ft.icons.BABY_CHANGING_STATION,
-            "Health": ft.icons.MEDICATION,
-            "Digital services": ft.icons.WIDGETS,
+            # Essential Living
+            "Groceries": ft.icons.SHOPPING_CART,
+            "Housing": ft.icons.HOME,
+            "Utilities": ft.icons.BOLT,
+            "Transportation": ft.icons.DIRECTIONS_CAR,
+            "Insurance": ft.icons.SECURITY,
+            "Healthcare": ft.icons.LOCAL_HOSPITAL,
+            # Personal Care
+            "Personal Care": ft.icons.FACE,
+            "Clothing": ft.icons.CHECKROOM,
+            "Fitness": ft.icons.FITNESS_CENTER,
+            # Food & Dining
             "Dining Out": ft.icons.RESTAURANT,
-            "Toys": ft.icons.CHILD_CARE,
-            "Presents": ft.icons.WALLET_GIFTCARD,
-            "Other": ft.icons.WALLET,
-            "Vacation": ft.icons.BEACH_ACCESS,
+            "Coffee": ft.icons.COFFEE,
+            "Snacks": ft.icons.FASTFOOD,
+            # Entertainment & Leisure
+            "Entertainment": ft.icons.MOVIE,
+            "Hobbies": ft.icons.PALETTE,
             "Books": ft.icons.BOOK,
-            "Self Improvement": ft.icons.BOOK_ROUNDED,
-            "Self care": ft.icons.BEACH_ACCESS_ROUNDED,
-            "Sweets": ft.icons.CAKE
+            "Gaming": ft.icons.SPORTS_ESPORTS,
+            # Technology
+            "Digital Services": ft.icons.CLOUD,
+            "Electronics": ft.icons.DEVICES,
+            "Software": ft.icons.COMPUTER,
+            # Family & Social
+            "Childcare": ft.icons.CHILD_CARE,
+            "Education": ft.icons.SCHOOL,
+            "Gifts": ft.icons.CARD_GIFTCARD,
+            "Pet Care": ft.icons.PETS,
+            # Special Occasions
+            "Travel": ft.icons.FLIGHT,
+            "Events": ft.icons.CELEBRATION,
+            "Charity": ft.icons.VOLUNTEER_ACTIVISM,
+            # Financial
+            "Savings": ft.icons.SAVINGS,
+            "Investments": ft.icons.TRENDING_UP,
+            "Debt Payment": ft.icons.PAYMENT,
+            # Miscellaneous
+            "Emergency": ft.icons.WARNING,
+            "Other": ft.icons.MORE_HORIZ
         }
         return icons_map.get(category, ft.icons.MONEY)
 
@@ -2917,19 +4326,54 @@ class BudgetApp:
 
     def open_settings_menu(self, e=None):
         print("Creating settings menu")
-        return ft.PopupMenuButton(
-            items=[
-                ft.PopupMenuItem(text='Avatar image',
-                                 on_click=self.show_avatar_selection_dialog),
-                ft.PopupMenuItem(text='Display Name',
-                                 on_click=self.show_add_name_dialog),
-                ft.PopupMenuItem(text='Configure budget',
-                                 on_click=self.show_add_budget_dialog),
-                ft.PopupMenuItem(text='Logout',
-                                 on_click=self.logout_clicked)
+        return ft.Container(
+            content=ft.PopupMenuButton(
+                items=[
+                    ft.PopupMenuItem(
+                        content=ft.Row([
+                            ft.Icon(ft.icons.ACCOUNT_CIRCLE, size=20, color=ft.colors.GREY_600),
+                            ft.Text('Avatar Image', size=14, weight=ft.FontWeight.W_500)
+                        ], spacing=12),
+                        on_click=self.show_avatar_selection_dialog
+                    ),
+                    ft.PopupMenuItem(
+                        content=ft.Row([
+                            ft.Icon(ft.icons.EDIT, size=20, color=ft.colors.GREY_600),
+                            ft.Text('Display Name', size=14, weight=ft.FontWeight.W_500)
+                        ], spacing=12),
+                        on_click=self.show_add_name_dialog
+                    ),
+                    ft.PopupMenuItem(
+                        content=ft.Row([
+                            ft.Icon(ft.icons.ACCOUNT_BALANCE_WALLET, size=20, color=ft.colors.GREY_600),
+                            ft.Text('Configure Budget', size=14, weight=ft.FontWeight.W_500)
+                        ], spacing=12),
+                        on_click=self.show_add_budget_dialog
+                    ),
+                    ft.PopupMenuItem(),  # Divider
+                    ft.PopupMenuItem(
+                        content=ft.Row([
+                            ft.Icon(ft.icons.LOGOUT, size=20, color=ft.colors.RED_600),
+                            ft.Text('Logout', size=14, weight=ft.FontWeight.W_500, color=ft.colors.RED_600)
+                        ], spacing=12),
+                        on_click=self.logout_clicked
+                    ),
 
-            ],
-            icon=ft.icons.SETTINGS
+                ],
+                content=ft.Container(
+                    content=ft.Icon(ft.icons.SETTINGS, size=24, color=ft.colors.GREY_600),
+                    padding=12,
+                    bgcolor=ft.colors.WHITE,
+                    border_radius=12,
+                    border=ft.border.all(1, ft.colors.GREY_200),
+                    shadow=ft.BoxShadow(
+                        spread_radius=0,
+                        blur_radius=4,
+                        color=ft.colors.with_opacity(0.1, ft.colors.BLACK),
+                        offset=ft.Offset(0, 2)
+                    )
+                ), bgcolor=ft.colors.LIGHT_GREEN_50
+            ),
         )
 
     def show_avatar_selection_dialog(self, e=None):

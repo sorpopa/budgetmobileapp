@@ -208,48 +208,141 @@ class FriendsUI:
 
     def create_friends_view(self):
         """Create the friends management UI"""
+        # Header section with icon and title
+        header_section = ft.Container(
+            content=ft.Row([
+                ft.Icon(
+                    ft.icons.PEOPLE,
+                    color=ft.colors.BLUE_400,
+                    size=32
+                ),
+                ft.Column([
+                    ft.Text(
+                        "Friends Management",
+                        size=24,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.colors.GREY_800,
+                        font_family='Arial'
+                    ),
+                    ft.Text(
+                        "Connect with friends and share expenses",
+                        size=14,
+                        color=ft.colors.GREY_600,
+                        font_family='Arial'
+                    )
+                ], spacing=2, expand=True),
+
+                # Add Friend button in header
+                ft.ElevatedButton(
+                    content=ft.Row([
+                        ft.Icon(ft.icons.PERSON_ADD, size=18),
+                        ft.Text("Add Friend", size=14, weight=ft.FontWeight.W_500)
+                    ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.colors.GREEN_400,
+                    color=ft.colors.WHITE,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=12),
+                        elevation=2,
+                        padding=ft.padding.symmetric(horizontal=16, vertical=12)
+                    ),
+                    on_click=self.show_add_friend_dialog
+                )
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            padding=ft.padding.all(20),
+            bgcolor=ft.colors.WHITE,
+            border_radius=16,
+            margin=ft.margin.only(bottom=20)
+        )
+
+        # Your Friends Section
+        friends_section = ft.Container(
+            content=ft.Column([
+                # Section header
+                ft.Row([
+                    ft.Icon(
+                        ft.icons.GROUP,
+                        color=ft.colors.BLUE_500,
+                        size=24
+                    ),
+                    ft.Text(
+                        "Your Friends",
+                        size=20,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.colors.GREY_800,
+                        font_family='Arial'
+                    )
+                ], spacing=12),
+
+                ft.Divider(color=ft.colors.GREY_200, height=1),
+
+                # Friends list container
+                self.friends_list
+            ], spacing=16),
+            padding=ft.padding.all(20),
+            bgcolor=ft.colors.WHITE,
+            border_radius=16,
+            margin=ft.margin.only(bottom=20)
+        )
+
+        # Friend Requests Section
+        requests_section = ft.Container(
+            content=ft.Column([
+                # Section header
+                ft.Row([
+                    ft.Icon(
+                        ft.icons.NOTIFICATIONS,
+                        color=ft.colors.ORANGE_500,
+                        size=24
+                    ),
+                    ft.Text(
+                        "Friend Requests",
+                        size=20,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.colors.GREY_800,
+                        font_family='Arial'
+                    )
+                ], spacing=12),
+
+                ft.Divider(color=ft.colors.GREY_200, height=1),
+
+                # Requests container
+                self.requests_list
+            ], spacing=16),
+            padding=ft.padding.all(20),
+            bgcolor=ft.colors.WHITE,
+            border_radius=16,
+            margin=ft.margin.only(bottom=20)
+        )
+
+        # Refresh button
+        refresh_button_container = ft.Container(
+            content=ft.Row([
+                ft.ElevatedButton(
+                    content=ft.Row([
+                        ft.Icon(ft.icons.REFRESH, size=18),
+                        ft.Text("Refresh", size=14, weight=ft.FontWeight.W_500)
+                    ], spacing=8, alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.colors.BLUE_400,
+                    color=ft.colors.WHITE,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=12),
+                        elevation=2,
+                        padding=ft.padding.symmetric(horizontal=20, vertical=12)
+                    ),
+                    on_click=self.refresh_clicked
+                )
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            margin=ft.margin.only(top=10)
+        )
+
 
         return ft.Container(
             content=ft.Column([
-                ft.Text("Friends Management", size=24, weight=ft.FontWeight.BOLD),
-
-                # Search for new friends
-                ft.Row([
-                    ft.FloatingActionButton(text="Add Friend",
-                                            icon=ft.icons.ADD,
-                                            bgcolor=ft.colors.LIME_300,
-                                            data=0,
-                                            on_click=self.show_add_friend_dialog,
-                                            ),
-                ], alignment=ft.MainAxisAlignment.END),
-
-                # Current friends
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Your Friends", size=18, weight=ft.FontWeight.BOLD),
-                        self.friends_list
-                    ]),
-                    padding=10,
-                    border=ft.border.all(1, ft.colors.GREY_400),
-                    border_radius=10
-                ),
-
-                # Pending friend requests
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("Friend Requests", size=18, weight=ft.FontWeight.BOLD),
-                        self.requests_list
-                    ]),
-                    padding=10,
-                    border=ft.border.all(1, ft.colors.GREY_400),
-                    border_radius=10,
-                    margin=ft.margin.only(bottom=20)
-                ),
-
-                ft.ElevatedButton("Refresh",
-                                  bgcolor=ft.colors.LIME_300,
-                                  on_click=self.refresh_clicked)
-            ]),
+                header_section,
+                friends_section,
+                requests_section,
+                refresh_button_container
+            ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO),
             padding=20
         )
 

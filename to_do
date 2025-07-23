@@ -34,8 +34,6 @@
 + add ability to configure display name
 + add friends
 + transform the add friends in a plus sign
-- display amount owed to friend near name on friends page(i)
-- add picture and display name for friends(i)
 + for shared expenses written in the friend's account modify:
         + userId should display a value, but not the actual user id
         + shared field should contain the email of the friend creating the id
@@ -45,16 +43,32 @@
 + add capability to create expenses from photo - with higher granularity - AI
 + add a feel good motto of the day - AI - timp mare de generare
     + transform in mesaje statice
-- add AI expense analysis
++ add AI expense analysis
         + new tab
         + should use data for the last month
-        - one analysis for month and one using the last 3 months
+        + one analysis every 2 weeks
         + save analysis and display all analysis with date
-- fix adding recursive expenses - on the exact same date, different month
-- display all expenses percentages vs recommended percentages on the main page
-- display percentage on pie chart
-- add a flag of "impulsive buy" and a happiness meter - tab under expenses
++ fix adding recursive expenses - on the exact same date, different month
++ display percentage on pie chart
 + add possibility to reset password - partially added, the email link is not sent - I need an smtp server/app domain
++ get_weekly_spending_change function
++ Overview doesn't get updated
++ view all button doesn't switch to all expenses tab
+- update expenses tab
+    - update expenses tab
+        + update add expense
+        + remove impulse index /replace with review item button
+        + update edit expense
+    + update AI analysis
+    - update charts tab
++ update friends tab
+- update wish list tab
+- update settings pop out
+- add income
+- display amount owed to friend near name on friends page(i)
+- add picture and display name for friends(i)
+
+
 - build SDK and test on phone
 
 Phase 2
@@ -62,6 +76,6 @@ Phase 2
 - password reset
 - add the possibility to configure multiple budgets : vacation, savings
 - add goals
-- add income
+- add analysis for a longer period of time - uses available analysis
 - optimize code with AI
 - unit test
