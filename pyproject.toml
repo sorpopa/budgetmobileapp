@@ -1,30 +1,34 @@
 [project]
 name = "expensetracker"
 version = "0.1.0"
-description = ""
+description = "Personal expense tracking app with AI assistance"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
-    { name = "Flet developer", email = "you@example.com" }
+    { name = "Sorina Popa", email = "ssmihaelapopa@gmail.com" }
 ]
 dependencies = [
   "flet==0.28.3"
 ]
 
-[tool.flet]
-# org name in reverse domain name notation, e.g. "com.mycompany".
-# Combined with project.name to build bundle ID for iOS and Android apps
-org = "com.mycompany"
+# Build configuration
+module = "main"
+icon = "assets/fancyzebra.png"  # Add an app icon if you have one
 
-# project display name that is used as an app title on Android and iOS home screens,
-# shown in window titles and about app dialogs on desktop.
-product = "expensetracker"
+# Android specific settings
+[tool.flet.android]
+package = "fancyzebra.app"  # Change to your desired package name
+permissions = [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.READ_EXTERNAL_STORAGE"
+]
 
-# company name to display in about app dialogs
-company = "Flet"
-
-# copyright text to display in about app dialogs
-copyright = "Copyright (C) 2025 by Flet"
+# Include assets
+[tool.flet.assets]
+src = "assets"
+dest = "assets"
 
 [tool.flet.app]
 path = "src"

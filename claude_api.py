@@ -7,7 +7,6 @@ import json
 import re
 from datetime import datetime
 
-
 load_dotenv()
 
 class ClaudeUtilityFunctions:
@@ -18,8 +17,6 @@ class ClaudeUtilityFunctions:
         Args:
             api_key: Anthropic API key. If None, will try to get from environment variable
         """
-
-
         self.api_key = api_key or os.getenv('ANTHROPIC_API_KEY')
         self.api_url = 'https://api.anthropic.com/v1/messages'
 
@@ -27,8 +24,8 @@ class ClaudeUtilityFunctions:
         if not self.api_key:
             print("Warning: No ANTHROPIC_API_KEY found in environment variables")
 
-        self.prompt = "Give a short financial advice"
 
+        self.prompt = "Give a short financial advice"
         self.headers = {
             'Content-Type': 'application/json',
             'X-API-Key': self.api_key,
@@ -43,7 +40,8 @@ class ClaudeUtilityFunctions:
             ]
         }
 
-    def process_image_with_anthropic(self, image_base64):
+
+    def process_image_with_anthropic(self, id_token, image_base64):
         """Send image to Anthropic API for expense extraction"""
         try:
             prompt = """
@@ -63,10 +61,11 @@ class ClaudeUtilityFunctions:
             - If date is not visible on receipt, use today's date
             - Only return the JSON object, no additional text
             """
+
             data = {
-            'model': 'claude-3-7-sonnet-latest',
-            'max_tokens': 1024,
-            'messages': [
+                'model': 'claude-3-7-sonnet-latest',
+                'max_tokens': 1024,
+                'messages': [
                     {
                         "role": "user",
                         "content": [
@@ -134,8 +133,8 @@ class ClaudeUtilityFunctions:
 
         expenses_text = "\n".join(formatted_expenses)
         prompt = f"""
-            You are a personal finance analyst AI. Analyze the following {analysis_period} expense data and 
-            provide comprehensive insights.
+            You are a personal finance analyst AI. Analyze the following {expenses_data} for period {analysis_period} and generate 
+            a clean, readable report using the specified format below. Follow these guidelines:
 
             **Expense Data:**
             {expenses_text}
@@ -146,7 +145,6 @@ class ClaudeUtilityFunctions:
             1. **Spending Overview**
                - Total spending for the {analysis_period}
                - Average daily spending
-               - Top 5 expense categories by amount
 
             2. **Spending Patterns**
                - Identify trends over time
@@ -180,12 +178,12 @@ class ClaudeUtilityFunctions:
                - Warning signs (if any)
 
             **Output Requirements:**
-            - Use clear headings and bullet points
-            - Include specific dollar amounts and percentages
-            - Provide actionable recommendations
-            - Highlight key insights in **bold**
-            - Keep explanations clear and practical
-            - End with 3 specific action items
+            - Keep formatting minimal and clean
+            - Use bold only for key monetary figures
+            - keep use of signs like '#' and '*' to a minimum
+            - Identify meaningful patterns and insights
+            - Include alerts only when concerning patterns are detected
+            - Be concise but informative
             """
         return prompt
 
@@ -215,11 +213,11 @@ class ClaudeUtilityFunctions:
         }
 
         response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=data,
-                verify=False  # Note: Using verify=False is not recommended for production
-            )
+            self.api_url,
+            headers=headers,
+            json=data,
+            verify=False  # Note: Using verify=False is not recommended for production
+        )
         if response.status_code != 200:
             print(f"Error: {response.status_code}")
             print(f"Response: {response.text}")

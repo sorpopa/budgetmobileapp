@@ -1,7 +1,7 @@
 import flet as ft
 from firebase_admin import firestore
 from google.cloud import firestore as fire
-
+from theme import Themecolors
 
 class FriendsManager:
     def __init__(self, user_id):
@@ -193,6 +193,7 @@ class FriendsUI:
         self.page = page
         self.user_id = user_id
         self.friends_manager = FriendsManager(user_id)
+        self.theme_colors = Themecolors(self.page)
 
         # UI Controls
         self.search_email_field = ft.TextField(label="Search by email", )
@@ -213,7 +214,7 @@ class FriendsUI:
             content=ft.Row([
                 ft.Icon(
                     ft.icons.PEOPLE,
-                    color=ft.colors.BLUE_400,
+                    color=self.theme_colors.teal_text_secondary,
                     size=32
                 ),
                 ft.Column([
@@ -221,13 +222,13 @@ class FriendsUI:
                         "Friends Management",
                         size=24,
                         weight=ft.FontWeight.BOLD,
-                        color=ft.colors.GREY_800,
+                        color=self.theme_colors.text_primary,
                         font_family='Arial'
                     ),
                     ft.Text(
                         "Connect with friends and share expenses",
                         size=14,
-                        color=ft.colors.GREY_600,
+                        color=self.theme_colors.text_secondary,
                         font_family='Arial'
                     )
                 ], spacing=2, expand=True),
@@ -235,11 +236,11 @@ class FriendsUI:
                 # Add Friend button in header
                 ft.ElevatedButton(
                     content=ft.Row([
-                        ft.Icon(ft.icons.PERSON_ADD, size=18),
-                        ft.Text("Add Friend", size=14, weight=ft.FontWeight.W_500)
+                        ft.Icon(ft.icons.PERSON_ADD, size=18, color=self.theme_colors.text_secondary),
+                        ft.Text("Add Friend", size=14, weight=ft.FontWeight.W_500,color=self.theme_colors.text_secondary)
                     ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.colors.GREEN_400,
-                    color=ft.colors.WHITE,
+                    bgcolor=self.theme_colors.teal_card,
+                    color=self.theme_colors.text_secondary,
                     style=ft.ButtonStyle(
                         shape=ft.RoundedRectangleBorder(radius=12),
                         elevation=2,
@@ -249,7 +250,7 @@ class FriendsUI:
                 )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=ft.padding.all(20),
-            bgcolor=ft.colors.WHITE,
+            bgcolor=self.theme_colors.background,
             border_radius=16,
             margin=ft.margin.only(bottom=20)
         )
@@ -261,14 +262,14 @@ class FriendsUI:
                 ft.Row([
                     ft.Icon(
                         ft.icons.GROUP,
-                        color=ft.colors.BLUE_500,
+                        color=self.theme_colors.teal_text_secondary,
                         size=24
                     ),
                     ft.Text(
                         "Your Friends",
                         size=20,
                         weight=ft.FontWeight.BOLD,
-                        color=ft.colors.GREY_800,
+                        color=self.theme_colors.teal_text_secondary,
                         font_family='Arial'
                     )
                 ], spacing=12),
@@ -279,7 +280,7 @@ class FriendsUI:
                 self.friends_list
             ], spacing=16),
             padding=ft.padding.all(20),
-            bgcolor=ft.colors.WHITE,
+            bgcolor=self.theme_colors.background,
             border_radius=16,
             margin=ft.margin.only(bottom=20)
         )
@@ -291,14 +292,14 @@ class FriendsUI:
                 ft.Row([
                     ft.Icon(
                         ft.icons.NOTIFICATIONS,
-                        color=ft.colors.ORANGE_500,
+                        color=self.theme_colors.logo_on_orange,
                         size=24
                     ),
                     ft.Text(
                         "Friend Requests",
                         size=20,
                         weight=ft.FontWeight.BOLD,
-                        color=ft.colors.GREY_800,
+                        color=self.theme_colors.text_primary,
                         font_family='Arial'
                     )
                 ], spacing=12),
@@ -309,7 +310,7 @@ class FriendsUI:
                 self.requests_list
             ], spacing=16),
             padding=ft.padding.all(20),
-            bgcolor=ft.colors.WHITE,
+            bgcolor=self.theme_colors.background,
             border_radius=16,
             margin=ft.margin.only(bottom=20)
         )
@@ -322,8 +323,8 @@ class FriendsUI:
                         ft.Icon(ft.icons.REFRESH, size=18),
                         ft.Text("Refresh", size=14, weight=ft.FontWeight.W_500)
                     ], spacing=8, alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.colors.BLUE_400,
-                    color=ft.colors.WHITE,
+                    bgcolor=self.theme_colors.teal_card,
+                    color=self.theme_colors.text_secondary,
                     style=ft.ButtonStyle(
                         shape=ft.RoundedRectangleBorder(radius=12),
                         elevation=2,
@@ -384,7 +385,7 @@ class FriendsUI:
                 on_click=lambda e: self.send_friend_request(user_data['userId'], user_data),
                 style=ft.ButtonStyle(
                     bgcolor=ft.colors.BLUE,
-                    color=ft.colors.WHITE
+                    color=self.theme_colors.text_secondary
                 )
             )
             self.search_results_container.controls.append(send_button)
@@ -477,7 +478,8 @@ class FriendsUI:
                         "Remove",
                         color=ft.colors.RED,
                         on_click=lambda e, fid=friend['userId'], fname=friend['displayName']: self.remove_friend(fid,
-                                                                                                                 fname)
+                                                                                                                 fname),
+                        bgcolor=self.theme_colors.button_background,
                     )
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 self.friends_list.controls.append(friend_row)

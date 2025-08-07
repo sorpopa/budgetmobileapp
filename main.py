@@ -10,7 +10,6 @@ import random
 import base64
 from dateutil.relativedelta import relativedelta
 from theme import Themecolors
-
 from auth_manager import AuthManager
 from friends_manager import FriendsUI, FriendsManager
 from ai_utilities import FinancialAdviceGenerator
@@ -22,6 +21,7 @@ load_dotenv()
 
 class BudgetApp:
     def __init__(self, page: ft.Page):
+        # Check if configuration is loaded
         self.page = page
         self.page.title = "Expense Tracker"
         self.page.theme_mode = ft.ThemeMode.DARK
@@ -59,7 +59,7 @@ class BudgetApp:
         self.display_name = None
         self.currency = None
         self.available_avatars = None
-        self.current_avatar = r"C:\Users\SPopa\PycharmProjects\ExpenseTracker\src\assets\fancy zebra.png"
+        self.current_avatar = r"src/assets/fancy zebra.png"
 
         # UI Controls
         self.email_field = ft.TextField(label="Email", expand=True)
@@ -86,8 +86,8 @@ class BudgetApp:
 
         self.auth_manager = AuthManager()
         self.advice_generator = FinancialAdviceGenerator()
-        self.ai_analyst = ClaudeUtilityFunctions()
         self.initialize_firebase()
+        self.ai_analyst = ClaudeUtilityFunctions()
 
         self.check_existing_session()
         # self.setup_ui()
@@ -125,6 +125,7 @@ class BudgetApp:
                 user = auth.get_user(user_id)
                 if user:
                     self.user_id = user_id
+                    self.id_token = stored_token
                     user_doc = self.db.collection('users').document(self.user_id).get()
                     user_data = user_doc.to_dict()
                     self.current_user = {}
@@ -147,7 +148,7 @@ class BudgetApp:
             content=ft.Icon(
                 name=ft.icons.ACCOUNT_BALANCE_WALLET,
                 size=56,
-                color=ft.colors.WHITE
+                color=self.theme_color.text_primary
             ),
             bgcolor=ft.colors.WHITE24,
             border_radius=20,
@@ -174,8 +175,8 @@ class BudgetApp:
         email_field = email_field = ft.TextField(
                     label="Email",
                     border=ft.InputBorder.NONE,
-                    label_style=ft.TextStyle(color=self.theme_color.text_secondary, size=14),
-                    text_style=ft.TextStyle(color=ft.colors.BLACK, size=16),
+                    label_style=ft.TextStyle(color=ft.colors.WHITE70 , size=14),
+                    text_style=ft.TextStyle(color=ft.colors.WHITE70, size=16),
                     cursor_color=ft.colors.TEAL_800,
                     selection_color=ft.colors.TEAL_200,
                     content_padding=ft.padding.symmetric(horizontal=20, vertical=16)
@@ -200,8 +201,8 @@ class BudgetApp:
                         label="Password",
                         password=True,
                         border=ft.InputBorder.NONE,
-                        label_style=ft.TextStyle(color=self.theme_color.text_secondary, size=14),
-                        text_style=ft.TextStyle(color=ft.colors.BLACK, size=16),
+                        label_style=ft.TextStyle(color=ft.colors.WHITE70, size=14),
+                        text_style=ft.TextStyle(color=ft.colors.WHITE70, size=16),
                         cursor_color=ft.colors.TEAL_600,
                         selection_color=ft.colors.TEAL_200,
                         content_padding=ft.padding.symmetric(horizontal=20, vertical=16)
@@ -465,7 +466,8 @@ class BudgetApp:
                 self.user_id = result["localId"]
                 self.display_name = result['displayName']
                 self.remember_user = True
-                self.auth_manager.save_user_session_preference(self.remember_user, id_token=self.id_token, user_id=self.user_id)
+                self.auth_manager.save_user_session_preference(self.remember_user, id_token=self.id_token,
+                                                               user_id=self.user_id)
 
                 self.show_main()
         except Exception as e:
@@ -557,7 +559,7 @@ class BudgetApp:
         """Initialize Firebase only when needed"""
         if self.firebase_auth is None:
             try:
-                self.firebase_auth = FirebaseAuth(self.API_KEY, self.SERVICE_ACCOUNT_PATH)
+                self.firebase_auth = FirebaseAuth(self.API_KEY, self.SERVICE_ACCOUNT_PATH,)
                 print("Firebase initialized successfully")
                 return True
             except Exception as e:
@@ -2125,16 +2127,6 @@ class BudgetApp:
                 border_radius=20,
             )
 
-        review_badge = None
-        if expense['review'] != "Not reviewing":
-            review_badge = ft.Row([
-                ft.Text("Review later", size=11,
-                    weight=ft.FontWeight.W_500,
-                    color=ft.colors.BLUE_400),
-                ft.Icon(ft.icons.CHECK_CIRCLE_OUTLINE, color=ft.colors.BLUE_400)
-            ])
-
-
         recurring_badge = None
         if expense["is recurring"] != 'No':
             recurring_badge = ft.Container(
@@ -2519,7 +2511,7 @@ class BudgetApp:
         if not expenses:
             print("No expenses found for analysis")
             return
-        generated_analysis = self.ai_analyst.analyze_expenses_with_ai(expenses)
+        generated_analysis = self.ai_analyst.analyze_expenses_with_ai(expenses, self.id_token)
 
         def save_analysis():
             analysis_data = {
@@ -2898,7 +2890,6 @@ class BudgetApp:
                     'amount': amount,
                     'category': category,
                     'description': description,
-                    'review': False,
                     'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'timestamp': datetime.now(),
                     'shared': shared,
@@ -2927,7 +2918,6 @@ class BudgetApp:
                             'amount': amount,
                             'category': category,
                             'description': description,
-                            'review item': False,
                             'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             'timestamp': datetime.now(),
                             'shared': self.current_user['displayName'],
@@ -2979,7 +2969,6 @@ class BudgetApp:
                     description_field,
                     share_with,
                     recurring_period,
-                    #review_item,
 
                 ], spacing=0, scroll=ft.ScrollMode.AUTO),
                 height=600,
@@ -3149,7 +3138,7 @@ class BudgetApp:
             return None
 
         # Process image with Anthropic
-        extracted_data = self.ai_analyst.process_image_with_anthropic(image_base64)
+        extracted_data = self.ai_analyst.process_image_with_anthropic(self.id_token, image_base64)
 
         # Create expense data structure
         expense_data = {
@@ -3262,7 +3251,7 @@ class BudgetApp:
                     # Generate a temporary ID for local storage
                     expense_data['id'] = f"local_{len(self.expenses)}"
 
-                self.expenses.append(expense_data)
+                self.expenses.insert(0,expense_data)
                 self.update_expenses_list()
                 self.update_budget_summary()
                 self.expense_from_picture_dialog.open = False
@@ -3422,25 +3411,6 @@ class BudgetApp:
             # thumb_color=ft.colors.BLUE_600,
         )
 
-        review_options = [ft.dropdown.Option("Review later"), ft.dropdown.Option("Not reviewing")]
-        review_item_input = ft.Dropdown(
-            options=review_options,
-            value="Not reviewing",
-            label="Review later",
-            border_radius=12,
-            bgcolor=self.theme_color.yellow_card,
-            border_color=ft.colors.YELLOW_400,
-            focused_border_color=ft.colors.YELLOW_600,
-        )
-
-        review_item = ft.Container(
-            content=review_item_input,
-            bgcolor=ft.colors.WHITE,
-            border_radius=8,
-            padding=10,
-            margin=ft.margin.only(bottom=10),
-            border=ft.border.all(1, ft.colors.GREY_200)
-        )
 
         owner_options = [ft.dropdown.Option("I owe the expense"), ft.dropdown.Option("Owes the expense")]
         owner_input = ft.Dropdown(
@@ -3527,7 +3497,6 @@ class BudgetApp:
                     'amount': amount,
                     'category': category,
                     'description': description,
-                    'review': False,
                     'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'timestamp': datetime.now(),
                     'shared': shared,
@@ -3554,7 +3523,6 @@ class BudgetApp:
                         'amount': amount,
                         'category': category,
                         'description': description,
-                        'review item': False,
                         'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'timestamp': datetime.now(),
                         'shared': self.display_name,
@@ -4820,7 +4788,7 @@ class BudgetApp:
             e.page.update()
 
     def get_available_avatars_from_folder(self,
-                                          folder_path=r"C:\Users\SPopa\PycharmProjects\ExpenseTracker\src\assets"):
+                                          folder_path=r"src/assets"):
         """Automatically get all image files from assets folder"""
         avatars = []
         if os.path.exists(folder_path):

@@ -54,28 +54,39 @@
 + get_weekly_spending_change function
 + Overview doesn't get updated
 + view all button doesn't switch to all expenses tab
-- update expenses tab
-    - update expenses tab
++ update expenses tab
+    + update expenses tab
         + update add expense
         + remove impulse index /replace with review item button
         + update edit expense
     + update AI analysis
-    - update charts tab
 + update friends tab
-- update wish list tab
-- update settings pop out
-- add income
-- display amount owed to friend near name on friends page(i)
-- add picture and display name for friends(i)
++ update wish list tab
++ update settings pop out to configure theme
+    + save setting to db
+    + load setting from db
+    + page does not update
++ add upcoming expenses on the overview page
+- update user token
+- when changing theme - don't reload all data - citiri suplimentare din db
 
 
 - build SDK and test on phone
 
 Phase 2
+- optiune salvare date local cu backup in cloud
+- eficientizare citiri/scrieri
+- mutare api keys - firebase functions
 - notifications
 - password reset
 - add the possibility to configure multiple budgets : vacation, savings
 - add goals
+- add income
+- review expenses
+- add possibility to edit displayed info
+- display amount owed to friend near name on friends page(i) - sau tab nou sub friends cu cheltuielile shared
+- add picture and display name for friends(i)
 - add analysis for a longer period of time - uses available analysis
 - optimize code with AI
 - unit test
+

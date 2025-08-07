@@ -1,0 +1,33 @@
+# Core Flet framework
+flet>=0.23.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Firebase/Firestore
+firebase-admin>=6.2.0
+google-cloud-firestore>=2.16.0
+
+# Claude API
+anthropic>=0.25.0
+
+# Date/time utilities
+python-dateutil>=2.8.0
+
+# JSON handling (usually built-in, but explicit for clarity)
+# json is built-in
+
+# Base64 encoding (built-in)
+# base64 is built-in
+
+# Random utilities (built-in)
+# random is built-in
+
+# OS utilities (built-in)
+# os is built-in
+
+# Typing utilities (built-in in Python 3.9+)
+typing-extensions>=4.0.0
+
+# Additional utilities you might be using
+requests>=2.31.0
