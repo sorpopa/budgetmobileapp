@@ -79,22 +79,41 @@ jobs:
         }
         
         echo "=== Build completed, checking output ==="
+        
+        # Check for APK files in common locations
+        if [ -d "build/apk" ]; then
+          echo "✓ Found build/apk directory"
+          ls -la build/apk/
+          
+          if ls build/apk/*.apk 1> /dev/null 2>&1; then
+            echo "✓ APK files found in build/apk/!"
+            ls -lh build/apk/*.apk
+          fi
+        fi
+        
         if [ -d "dist" ]; then
           echo "✓ Found dist directory"
           ls -la dist/
           
           if ls dist/*.apk 1> /dev/null 2>&1; then
-            echo "✓ APK files found!"
+            echo "✓ APK files found in dist/!"
             ls -lh dist/*.apk
-          else
-            echo "❌ No APK files found in dist/"
-            echo "Contents of dist/:"
-            find dist/ -type f
-            exit 1
           fi
-        else
-          echo "❌ No dist directory found"
+        fi
+        
+        # Look for APK files anywhere
+        echo "=== Searching for all APK files ==="
+        find . -name "*.apk" -type f | while read apk; do
+          echo "Found APK: $apk"
+          ls -lh "$apk"
+        done
+        
+        # Verify we have at least one APK
+        if ! find . -name "*.apk" -type f | grep -q .; then
+          echo "❌ No APK files found anywhere!"
           exit 1
+        else
+          echo "✓ APK files found successfully!"
         fi
 
     - name: Upload APK
@@ -102,7 +121,11 @@ jobs:
       if: success()
       with:
         name: ExpenseTracker-APK
-        path: dist/*.apk
+        path: |
+          build/apk/*.apk
+          dist/*.apk
+          **/*.apk
+        if-no-files-found: warn
         retention-days: 30
 
     - name: Upload debug info on failure
