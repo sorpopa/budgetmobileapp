@@ -1,9 +1,10 @@
 [project]
-name = "expensetracker"
+name = "fancyzebra"
 version = "0.1.0"
 description = "Personal expense tracking app"
 dependencies = [
     "flet==0.28.3"
+
 ]
 
 [build-system]

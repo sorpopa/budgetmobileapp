@@ -5,8 +5,8 @@ flet==0.28.3
 python-dotenv>=1.0.0
 
 # Firebase/Firestore
-firebase-admin>=6.2.0
-google-cloud-firestore>=2.16.0
+firebase_admin==6.9.0
+google-cloud-firestore==2.21.0
 
 # Claude API
 anthropic>=0.25.0
