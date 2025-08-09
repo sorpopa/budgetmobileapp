@@ -1,4 +1,4 @@
-name: Build Flet Android APK (Simple)
+name: Build Flet Android APK (Final)
 
 on:
   push:
@@ -40,101 +40,62 @@ jobs:
         pip install --upgrade pip
         pip install "flet[build-tools]==0.28.3"
         
-        # Install your app dependencies if you have them
         if [ -f requirements.txt ]; then
           pip install -r requirements.txt
         fi
 
-    - name: Verify setup
-      run: |
-        echo "=== Verifying Python and Flet ==="
-        python --version
-        pip show flet
-        
-        echo "=== Verifying Android SDK ==="
-        echo "ANDROID_HOME: $ANDROID_HOME"
-        ls -la $ANDROID_HOME/
-        
-        echo "=== Verifying project files ==="
-        ls -la
-        if [ ! -f "main.py" ]; then
-          echo "❌ main.py not found!"
-          exit 1
-        fi
-        
-        echo "=== Testing Flet import ==="
-        python -c "import flet; print('✓ Flet imported successfully')"
-
     - name: Build APK
       run: |
-        echo "=== Starting Flet build ==="
         export ANDROID_HOME=$ANDROID_SDK_ROOT
+        flet build apk --verbose
+
+    - name: Find and prepare APK files
+      run: |
+        echo "=== Searching for APK files ==="
         
-        # Run build with timeout and error handling
-        timeout 30m flet build apk --verbose || {
-          echo "❌ Build failed or timed out"
-          echo "=== Checking for partial build artifacts ==="
-          find . -name "*.apk" -o -name "*.aab" | head -10
-          exit 1
-        }
+        # Create a staging directory for artifacts
+        mkdir -p apk_output
         
-        echo "=== Build completed, checking output ==="
-        
-        # Check for APK files in common locations
-        if [ -d "build/apk" ]; then
-          echo "✓ Found build/apk directory"
-          ls -la build/apk/
-          
-          if ls build/apk/*.apk 1> /dev/null 2>&1; then
-            echo "✓ APK files found in build/apk/!"
-            ls -lh build/apk/*.apk
-          fi
-        fi
-        
-        if [ -d "dist" ]; then
-          echo "✓ Found dist directory"
-          ls -la dist/
-          
-          if ls dist/*.apk 1> /dev/null 2>&1; then
-            echo "✓ APK files found in dist/!"
-            ls -lh dist/*.apk
-          fi
-        fi
-        
-        # Look for APK files anywhere
-        echo "=== Searching for all APK files ==="
-        find . -name "*.apk" -type f | while read apk; do
-          echo "Found APK: $apk"
-          ls -lh "$apk"
+        # Find all APK files and copy them to staging
+        find . -name "*.apk" -type f | while read apk_file; do
+          echo "Found APK: $apk_file"
+          cp "$apk_file" apk_output/
+          ls -lh "$apk_file"
         done
         
-        # Verify we have at least one APK
-        if ! find . -name "*.apk" -type f | grep -q .; then
-          echo "❌ No APK files found anywhere!"
-          exit 1
+        # List what we found
+        echo "=== APK files ready for upload ==="
+        ls -la apk_output/
+        
+        # Create a summary file
+        echo "Build completed at: $(date)" > apk_output/build_info.txt
+        echo "APK files found:" >> apk_output/build_info.txt
+        ls -la apk_output/*.apk >> apk_output/build_info.txt 2>/dev/null || echo "No APK files" >> apk_output/build_info.txt
+        
+        # Verify we have APK files
+        if ls apk_output/*.apk 1> /dev/null 2>&1; then
+          echo "✓ APK files ready for upload!"
         else
-          echo "✓ APK files found successfully!"
+          echo "❌ No APK files found to upload"
+          echo "Full directory structure:"
+          find . -type f -name "*.apk" -o -name "*.aab" | head -20
+          exit 1
         fi
 
-    - name: Upload APK
+    - name: Upload APK files
       uses: actions/upload-artifact@v4
-      if: success()
       with:
         name: ExpenseTracker-APK
-        path: |
-          build/apk/*.apk
-          dist/*.apk
-          **/*.apk
-        if-no-files-found: warn
+        path: apk_output/
         retention-days: 30
+        if-no-files-found: error
 
-    - name: Upload debug info on failure
+    - name: Upload build directory (for debugging)
       uses: actions/upload-artifact@v4
-      if: failure()
+      if: always()
       with:
-        name: debug-logs
+        name: build-directory
         path: |
-          .flet/
-          *.log
+          build/
         if-no-files-found: ignore
         retention-days: 7
