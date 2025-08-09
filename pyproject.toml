@@ -1,12 +1,7 @@
 [project]
 name = "expensetracker"
 version = "0.1.0"
-description = "Personal expense tracking app with AI assistance"
-readme = "README.md"
-requires-python = ">=3.9"
-authors = [
-    { name = "Sorina Popa", email = "ssmihaelapopa@gmail.com" }
-]
+description = "Personal expense tracking app"
 dependencies = [
     "flet==0.28.3"
 ]
@@ -17,12 +12,5 @@ requires = ["flet"]
 [tool.flet.android]
 package = "com.fancyzebra.expensetracker"
 permissions = [
-    "android.permission.INTERNET",
-    "android.permission.ACCESS_NETWORK_STATE",
-    "android.permission.WRITE_EXTERNAL_STORAGE",
-    "android.permission.READ_EXTERNAL_STORAGE"
+    "android.permission.INTERNET"
 ]
-
-[tool.flet.assets]
-src = "assets"
-dest = "assets"
