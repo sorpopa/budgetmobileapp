@@ -1,5 +1,5 @@
 # Core Flet framework
-flet>=0.23.0
+flet==0.28.3
 
 # Environment variables
 python-dotenv>=1.0.0
