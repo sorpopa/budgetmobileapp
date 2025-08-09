@@ -8,16 +8,14 @@ authors = [
     { name = "Sorina Popa", email = "ssmihaelapopa@gmail.com" }
 ]
 dependencies = [
-  "flet==0.28.3"
+    "flet==0.28.3"
 ]
 
-# Build configuration
-module = "main"
-icon = "assets/fancyzebra.png"  # Add an app icon if you have one
+[build-system]
+requires = ["flet"]
 
-# Android specific settings
 [tool.flet.android]
-package = "fancyzebra.app"  # Change to your desired package name
+package = "com.fancyzebra.expensetracker"
 permissions = [
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
@@ -25,21 +23,6 @@ permissions = [
     "android.permission.READ_EXTERNAL_STORAGE"
 ]
 
-# Include assets
 [tool.flet.assets]
 src = "assets"
 dest = "assets"
-
-[tool.flet.app]
-path = "src"
-
-[tool.uv]
-dev-dependencies = [
-    "flet[all]==0.28.3",
-]
-
-[tool.poetry]
-package-mode = false
-
-[tool.poetry.group.dev.dependencies]
-flet = {extras = ["all"], version = "0.28.3"}

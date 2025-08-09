@@ -22,11 +22,12 @@ class AuthManager:
             app_dir.mkdir(exist_ok=True)
             return app_dir / 'user_data.json'
 
-    def save_user_session_preference(self, preference, id_token, user_id):
+    def save_user_session_preference(self, preference, id_token, refresh_token, user_id):
         """Save user session data locally"""
         user_data = {
             'remember_me': preference,
             'id_token': id_token,
+            'refresh_token': refresh_token,
             'user_id': user_id,
             'saved_at': str(datetime.now())
         }

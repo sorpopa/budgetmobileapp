@@ -41,6 +41,26 @@ class FirebaseAuth:
         except Exception as e:
             return {"error": str(e)}
 
+    def refresh_id_token(self, refresh_token):
+        print("refre_id_token function")
+        url = f"https://securetoken.googleapis.com/v1/token?key={self.api_key}"
+        payload = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+        response = requests.post(url, data=payload)
+        print(f"response for token refresh {response}")
+        if response.status_code == 200:
+            data = response.json()
+            id_token = data['id_token']
+            refresh_token = data['refresh_token']
+            print(f"new tokens: {id_token, refresh_token}")
+            return id_token, refresh_token
+
+        else:
+            print(f"Token refresh failed: {response.status_code}")
+            print(f"Response: {response.text}")
+
     def sign_in(self, email, password):
         """Sign in existing user"""
         url = f"{self.auth_url}:signInWithPassword?key={self.api_key}"

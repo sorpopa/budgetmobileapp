@@ -55,11 +55,13 @@ class BudgetApp:
         self.firebase_auth = None
         self.current_user = None
         self.id_token = None
+        self.refresh_token = None
+        self.token_expiry = None
         self.user_id = None
         self.display_name = None
         self.currency = None
         self.available_avatars = None
-        self.current_avatar = r"src/assets/fancy zebra.png"
+        self.current_avatar = r"/assets/fancy zebra.png"
 
         # UI Controls
         self.email_field = ft.TextField(label="Email", expand=True)
@@ -109,6 +111,7 @@ class BudgetApp:
         user_session = self.auth_manager.load_user_session()
         remember_user = user_session.get('remember_me')
         stored_token = user_session.get('id_token')
+        self.refresh_token = user_session.get('refresh_token')
         user_id = user_session.get('user_id')
         print(f"Saved user session: {user_session}")
 
@@ -117,11 +120,14 @@ class BudgetApp:
                 print("⚠️ Firebase not initialized, initializing database")
                 self.db = firestore.client()
             try:
-                '''
-                # Verify the ID token
-                decoded_token = auth.verify_id_token(stored_token)
-                self.user_id = decoded_token['uid']
-                '''
+                try:
+                    decoded_token=self.firebase_auth.verify_token(stored_token)
+                    if "error" in decoded_token:
+                        print(f"Refreshing token {self.refresh_token}")
+                        stored_token, self.refresh_token = self.firebase_auth.refresh_id_token(self.refresh_token)
+                    print(f"Decoded token is {decoded_token}")
+                except Exception as e:
+                    print(e)
                 user = auth.get_user(user_id)
                 if user:
                     self.user_id = user_id
@@ -463,10 +469,13 @@ class BudgetApp:
             else:
                 self.current_user = result
                 self.id_token = result["idToken"]
+                self.refresh_token = result["refreshToken"]
+                self.token_expiry = result["expiresIn"]
                 self.user_id = result["localId"]
                 self.display_name = result['displayName']
                 self.remember_user = True
                 self.auth_manager.save_user_session_preference(self.remember_user, id_token=self.id_token,
+                                                               refresh_token= self.refresh_token,
                                                                user_id=self.user_id)
 
                 self.show_main()
@@ -521,11 +530,14 @@ class BudgetApp:
             else:
                 self.current_user = result
                 self.id_token = result["idToken"]
+                self.refresh_token = result["refreshToken"]
+                self.token_expiry = result["expiresIn"]
                 self.user_id = result["localId"]
 
                 self.create_user_profile(self.user_id, email)
                 self.remember_user = True
                 self.auth_manager.save_user_session_preference(self.remember_user, id_token=self.id_token,
+                                                               refresh_token=self.refresh_token,
                                                                user_id=self.user_id)
 
                 self.show_main()
@@ -4788,7 +4800,7 @@ class BudgetApp:
             e.page.update()
 
     def get_available_avatars_from_folder(self,
-                                          folder_path=r"src/assets"):
+                                          folder_path=r"/assets"):
         """Automatically get all image files from assets folder"""
         avatars = []
         if os.path.exists(folder_path):
